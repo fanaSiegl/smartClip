@@ -252,32 +252,6 @@ class SmartClip(object):
 		
 		self.yLow = -1000
 		
-		'''
-		return
-		
-		smallFaceMate = base.PickEntities(constants.ABAQUS, "FACE", initial_entities = self.smallFace)
-		smallFaceMate.remove(self.smallFace)
-		self.yUp = getStopDistance(self.smallFace, smallFaceMate[0], self.centerCoordNode)
-		
-		largeFaceMate = base.PickEntities(constants.ABAQUS, "FACE", initial_entities = self.largeFace)
-		largeFaceMate.remove(self.largeFace)
-		self.zUp = 1+getStopDistance(self.largeFace, largeFaceMate[0], self.centerCoordNode)
-		
-		oppositeFaceMate = base.PickEntities(constants.ABAQUS, "FACE", initial_entities = self.oppositeFace)
-		oppositeFaceMate.remove(self.oppositeFace)
-		self.zLow = 1+getStopDistance(self.oppositeFace, oppositeFaceMate[0], self.centerCoordNode, -1)
-		
-		sideFaces1Mate = base.PickEntities(constants.ABAQUS, "FACE", initial_entities = self.sideFaces[0])
-		sideFaces1Mate.remove(self.sideFaces[0])
-		self.xLow = getStopDistance(self.sideFaces[0], sideFaces1Mate[0], self.centerCoordNode, -1)
-		
-		sideFaces2Mate = base.PickEntities(constants.ABAQUS, "FACE", initial_entities = self.sideFaces[1])
-		sideFaces2Mate.remove(self.sideFaces[1])
-		self.xUp = getStopDistance(self.sideFaces[1], sideFaces2Mate[0], self.centerCoordNode)
-		
-		self.yLow = -1000
-		
-		'''
 		#print(xLow, xUp, yUp, yLow, zLow, zUp)
 		status = base.And(ent, constants.ABAQUS)
 			
