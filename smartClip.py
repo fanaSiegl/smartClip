@@ -19,8 +19,8 @@ class SmartClip(object):
 		try:
 			self.setBaseFaces()
 			
-			return
 			self.createNodesForConnector()
+			
 			self.setStopDistances()
 			self.createCoorSystem()
 			self.createConnector()
@@ -31,17 +31,31 @@ class SmartClip(object):
     #-------------------------------------------------------------------------
     
 	def _getPointProjectionCoords(self, faces, pointCoords, vector, tolerance=50):
-    	
+		    	
     	# check for point projection on opposite face
+		foundProjection = list()
+		foundCoordinates = list()
+		distances = list()
 		for face in faces:
 			projectedPointCoords =ansa.base.ProjectPointDirectional(
 				face, pointCoords[0], pointCoords[1], pointCoords[2],
 				vector[0], vector[1], vector[2], tolerance, project_on="faces")
+			
+			
 			if projectedPointCoords is not None:
-				return face, projectedPointCoords
+				distances.append(np.linalg.norm(np.array(pointCoords) - np.array(projectedPointCoords)))
+				foundProjection.append(face)
+				foundCoordinates.append(projectedPointCoords)
+				#return face, projectedPointCoords
+		if len(foundProjection) == 1:
+			return foundProjection[0], foundCoordinates[0]
+		elif len(foundProjection) > 1:
+			minDistanceIndex = np.argsort(distances)[0]
+			return foundProjection[minDistanceIndex], foundCoordinates[minDistanceIndex]
 		
-		if projectedPointCoords is None:
-			showMessage("Clip button face not found! Please select the face manually.")
+		else:
+		#if projectedPointCoords is None:
+			showMessage("Projection to given faces not found within given tolerance of %s mm! Please select the face manually." % tolerance)
 			face = set(base.PickEntities(constants.ABAQUS, "FACE"))
 			projectedPointCoords =ansa.base.ProjectPointDirectional(
 				face, pointCoords[0], pointCoords[1], pointCoords[2],
@@ -49,6 +63,35 @@ class SmartClip(object):
 		
 		return face, projectedPointCoords
 
+	#-------------------------------------------------------------------------
+	
+	def _getStopDistance(self, clipFacePoint, mateFacePoint, direction=1):
+	
+		# searching for distances
+		mNodeClipFace = ansa.base.CreateMeasurement([clipFacePoint, self.centerCoordNode], 'DISTANCE')
+		mNodeMateFace = ansa.base.CreateMeasurement([mateFacePoint, self.centerCoordNode], 'DISTANCE')	
+		mFace2face = ansa.base.CreateMeasurement([clipFacePoint, mateFacePoint], 'DISTANCE')
+		
+		faceDist = getEntityProperty(mFace2face, 'RESULT')
+		
+		nodeFaceClipDist = getEntityProperty(mNodeClipFace, 'RESULT')
+		nodeFaceMateDist = getEntityProperty(mNodeMateFace, 'RESULT')
+		#print(nodeFaceClipDist, nodeFaceMateDist)
+	
+		if nodeFaceClipDist > nodeFaceMateDist:
+			print('Penetration detected! Distance set to: 0.01')
+			faceDist = 0.01
+		
+		if abs(faceDist) < 0.01:
+			faceDist = 0.01
+		else:
+			faceDist = round(faceDist, 2)
+		
+		base.DeleteEntity(mNodeClipFace)
+		base.DeleteEntity(mNodeMateFace)
+		
+		return faceDist*direction
+		
 	#-------------------------------------------------------------------------
     
 	def setBaseFaces(self):
@@ -67,59 +110,20 @@ class SmartClip(object):
 		self.smallFace = sortedFaces[0]
 		self.largeFace = sortedFaces[1]
 		
+		# set clip property
+		self.clipProperty = base.GetEntity(constants.NASTRAN, 'PSHELL', getEntityProperty(self.largeFace, 'PID'))
+		
 		smallFaceCons = base.CollectEntities(constants.ABAQUS, self.smallFace, "CONS")
 		smallFaceCons.remove(self.selectedCon)
 		largeFaceCons = base.CollectEntities(constants.ABAQUS, self.largeFace, "CONS")
 		largeFaceCons.remove(self.selectedCon)
-		
 		
 		# find opposite con to selected one belonging to the smaller face
 		sortedCons = sortEntities(smallFaceCons, getConLength)
 		oppositeCon = sortedCons[-1]
 		smallFaceCons.remove(oppositeCon)
 		
-		# create points for coordinate system
-		self.middlePointCoords = getConMiddle(self.selectedCon)
-		self.topEdgeMiddleCoords = getConMiddle(oppositeCon)
-		oppositeProjectionVector = self.middlePointCoords - self.topEdgeMiddleCoords
-		'''
-		cons = [oppositeCon]
-		
-		#base.PickEntities(constants.ABAQUS, "CONS",  initial_entities = cons)
-		oppositeFacePointCoords = None
-		checkedfaces = set()
-		counter = 0
-		while oppositeFacePointCoords is None:
-			clipFaces = set(ansa.base.GetFacesOfCons(cons))
-			clipFaces.discard(self.smallFace)
-			clipFaces.discard(self.largeFace)
-			
-			#base.PickEntities(constants.ABAQUS, "FACE",  initial_entities = clipFaces)
-			
-			cons = base.CollectEntities(constants.ABAQUS, clipFaces, "CONS")
-			
-			newFaces = clipFaces.difference(checkedfaces)
-			
-			# check maximum number of iterations
-			if counter > 10:
-				showMessage("Clip button face not found! Please select the face manually.")
-				newFaces = set(base.PickEntities(constants.ABAQUS, "FACE"))
-			
-			# check for point projection on opposite face
-			for newFace in newFaces:
-				
-				oppositeFacePointCoords =ansa.base.ProjectPointDirectional(
-					newFace, self.middlePointCoords[0], self.middlePointCoords[1], self.middlePointCoords[2],
-					oppositeProjectionVector[0], oppositeProjectionVector[1], oppositeProjectionVector[2], 10, project_on="faces")
-
-				
-				if oppositeFacePointCoords is not None:
-					self.oppositeFace = newFace
-					break
-				checkedfaces.add(newFace)
-
-			counter += 1
-		'''
+		# find all faces on clip
 		cons = [oppositeCon]
 		for i in range(8):
 			clipFaces = set(ansa.base.GetFacesOfCons(cons))
@@ -130,71 +134,54 @@ class SmartClip(object):
 			#newFaces = clipFaces.difference(checkedfaces)
 		#base.PickEntities(constants.ABAQUS, "FACE",  initial_entities = clipFaces)
 		
-
+		# create points for coordinate system
+		self.middlePointCoords = getConMiddle(self.selectedCon)
+		self.topEdgeMiddleCoords = getConMiddle(oppositeCon)
+		
+		# guiding face normals
+		self.smallFaceNormal = base.GetFaceOrientation(self.smallFace)
+		self.largeFaceNormal = base.GetFaceOrientation(self.largeFace)
+		
+		# find opposite projection
+		#self.oppositeProjectionVector = self.middlePointCoords - self.topEdgeMiddleCoords
+		#self.oppositeProjectionVector = np.cross(smallFaceNormal, largeFaceNormal)
+		
+		self.oppositeProjectionVector = -1*np.array(self.largeFaceNormal)
 		self.oppositeFace, self.oppositeFacePointCoords = self._getPointProjectionCoords(
-			clipFaces, self.middlePointCoords, oppositeProjectionVector)
+			clipFaces, self.middlePointCoords, self.oppositeProjectionVector)
+		self.oppositeFacePoint = base.Newpoint(*self.oppositeFacePointCoords)
 		
-		
-		
-		#print(oppositeFacePointCoords, self.oppositeFace)
-		base.Newpoint(*self.oppositeFacePointCoords)
-		base.Newpoint(*self.topEdgeMiddleCoords)
+		# front face point
+		self.frontFacePointCoords = self.middlePointCoords + 1*np.array(self.smallFaceNormal)
+		self.frontFacePoint = base.Newpoint(*self.frontFacePointCoords)
 		
 		self.clipFaces = list(sortEntities(list(clipFaces), base.GetFaceArea))
 		self.oppositeFacePointCoords =  self.oppositeFacePointCoords
 		
 		# find coordinates for coordinate system
 		self.centerCoordPointCoords = np.median([self.oppositeFacePointCoords, self.middlePointCoords], axis=0)
+		base.Newpoint(*self.centerCoordPointCoords)
 		
-		# find side faces
-		smallFaceNormal = base.GetFaceOrientation(self.smallFace)
+		# find side faces		
+		searchOnFaces = self.clipFaces[:]
+		self.sideProjectionVectorPlus = np.cross(self.smallFaceNormal, self.oppositeProjectionVector)
+		self.sideFacePlus, sidePlusPointCoords = self._getPointProjectionCoords(
+			searchOnFaces, self.centerCoordPointCoords, self.sideProjectionVectorPlus)
+		# move a point lower
+		self.sidePlusPointCoords = sidePlusPointCoords + 1*np.array(self.smallFaceNormal)
+		self.sideFacePlusPoint = base.Newpoint(*self.sidePlusPointCoords)
 		
-		searchOnFaces = self.clipFaces
-		sideProjectionVectorPlus = np.cross(smallFaceNormal, oppositeProjectionVector)
-		sideFacePlus, sidePlusPointCoords = self._getPointProjectionCoords(
-			searchOnFaces, self.centerCoordPointCoords, sideProjectionVectorPlus)
-		base.Newpoint(*sidePlusPointCoords)
-		print(sideFacePlus, sidePlusPointCoords)
-		
-		searchOnFaces.remove(sideFacePlus)
-		sideProjectionVectorMinus = np.cross(oppositeProjectionVector, smallFaceNormal)
-		sideFaceMinus, sideMinusPointCoords = self._getPointProjectionCoords(
-			searchOnFaces, self.centerCoordPointCoords, sideProjectionVectorMinus)
-		base.Newpoint(*sideMinusPointCoords)
-		print(sideFaceMinus, sideMinusPointCoords)
-		
-		
-		
-		
-		
-		
-		
-		return
-		# get clip side faces
-		neighbourFacesSmallFace = ansa.base.GetFacesOfCons(cons = smallFaceCons)
-		neighbourFacesSmallFace.remove(self.smallFace)
-		neighbourFacesLargeFace = ansa.base.GetFacesOfCons(cons = largeFaceCons)
-		neighbourFacesLargeFace.remove(self.largeFace)
-	
-		self.sideFaces = list(set(neighbourFacesSmallFace).intersection(neighbourFacesLargeFace))
-		
-		#get top face
-		topFace =  base.GetFacesOfCons(cons = oppositeCon)
-		topFace.remove(self.smallFace)
-		self.topFace = topFace[0]
-		
-		#get opposite face
-		largeFaceOrientation = base.GetFaceOrientation(self.largeFace)
-		exclude = neighbourFacesSmallFace[:]
-		exclude.extend(neighbourFacesLargeFace)
-		exclude.append(self.smallFace)
-		exclude.append(self.largeFace)
+		searchOnFaces.remove(self.sideFacePlus)
+		self.sideProjectionVectorMinus = np.cross(self.oppositeProjectionVector, self.smallFaceNormal)
+		self.sideFaceMinus, sideMinusPointCoords = self._getPointProjectionCoords(
+			searchOnFaces, self.centerCoordPointCoords, self.sideProjectionVectorMinus)
+		# move a point lower
+		self.sideMinusPointCoords = sideMinusPointCoords + 1*np.array(self.smallFaceNormal)
+		self.sideFaceMinusPoint = base.Newpoint(*self.sideMinusPointCoords)
 	
 	#-------------------------------------------------------------------------
     
 	def createNodesForConnector(self):
-		
-		
 		
 		fstHPcoords, scndHPcoords = getConsHotPointCoords(self.selectedCon)
 		self.thirdPointCoords = np.median([scndHPcoords, self.middlePointCoords], axis=0)
@@ -215,13 +202,58 @@ class SmartClip(object):
 		
 		# searching for distances
 		# show only relevant entities
-		prop = base.GetEntity(constants.NASTRAN, 'PSHELL', getEntityProperty(self.largeFace, 'PID'))
+		base.All()
 		base.Or(self.largeFace, constants.ABAQUS)
 		base.Near(radius=10., dense_search=True, custom_entities=self.largeFace)
 		# hide property
-		ent = base.CollectEntities(constants.ABAQUS, [prop], "FACE", filter_visible=True )
+		ent = base.CollectEntities(constants.ABAQUS, [self.clipProperty], "FACE", filter_visible=True )
 		status = base.Not(ent, constants.ABAQUS)
 		
+		# find faces on clip mate geometry
+		neighbourFaces = base.CollectEntities(constants.ABAQUS, None, "FACE", filter_visible=True)
+		self.neighbourFaces = sortEntities(neighbourFaces, base.GetFaceArea)
+		
+		#base.PickEntities(constants.ABAQUS, "FACE",  initial_entities = self.neighbourFaces)
+		
+		# find opposite projection mate
+		self.oppositeNeighbourFace, self.oppositeNeighbourFacePointCoords = self._getPointProjectionCoords(
+			self.neighbourFaces, self.oppositeFacePointCoords, self.oppositeProjectionVector)
+		self.oppositeNeighbourFacePoint = base.Newpoint(*self.oppositeNeighbourFacePointCoords)
+		self.zLow = 1+self._getStopDistance(self.oppositeFacePoint, self.oppositeNeighbourFacePoint, -1)
+		
+		# find front projection mate
+		self.frontNeighbourFace, self.frontNeighbourFacePointCoords = self._getPointProjectionCoords(
+			self.neighbourFaces, self.frontFacePointCoords, self.largeFaceNormal)
+		self.frontNeighbourFacePoint = base.Newpoint(*self.frontNeighbourFacePointCoords)
+		self.zUp = 1+self._getStopDistance(self.frontFacePoint, self.frontNeighbourFacePoint)
+		
+		# find side plus projection mate
+		self.sidePlusNeighbourFace, self.sidePlusNeighbourFacePointCoords = self._getPointProjectionCoords(
+			self.neighbourFaces, self.sidePlusPointCoords, self.sideProjectionVectorPlus)
+		self.sidePlusNeighbourFacePoint = base.Newpoint(*self.sidePlusNeighbourFacePointCoords)
+		self.xUp = self._getStopDistance(self.sideFacePlusPoint, self.sidePlusNeighbourFacePoint)
+		
+		# find side minus projection mate
+		self.sideMinusNeighbourFace, self.sideMinusNeighbourFacePointCoords = self._getPointProjectionCoords(
+			self.neighbourFaces, self.sideMinusPointCoords, self.sideProjectionVectorMinus)
+		self.sideMinusNeighbourFacePoint = base.Newpoint(*self.sideMinusNeighbourFacePointCoords)
+		self.xLow = self._getStopDistance(self.sideFaceMinusPoint, self.sideMinusNeighbourFacePoint, -1)
+		
+		# find top projection mate - created after the front gap distance is known - zUp
+		#moveNormVector = np.array(self.largeFaceNormal)/ np.linalg.norm(np.array(self.largeFaceNormal))
+		#self.topPointCoords = self.middlePointCoords + (self.zUp-1 + 0.1)*moveNormVector
+		self.topPointCoords = self.middlePointCoords + (self.zUp-1 + 0.1)*np.array(self.largeFaceNormal)
+		self.topPoint = base.Newpoint(*self.topPointCoords)
+		
+		self.topNeighbourFace, self.topNeighbourFacePointCoords = self._getPointProjectionCoords(
+			self.neighbourFaces, self.topPointCoords, self.smallFaceNormal)
+		self.topNeighbourFacePoint = base.Newpoint(*self.topNeighbourFacePointCoords)
+		self.yUp = self._getStopDistance(self.topPoint, self.topNeighbourFacePoint)
+		
+		self.yLow = -1000
+		
+		'''
+		return
 		
 		smallFaceMate = base.PickEntities(constants.ABAQUS, "FACE", initial_entities = self.smallFace)
 		smallFaceMate.remove(self.smallFace)
@@ -245,9 +277,10 @@ class SmartClip(object):
 		
 		self.yLow = -1000
 		
+		'''
 		#print(xLow, xUp, yUp, yLow, zLow, zUp)
 		status = base.And(ent, constants.ABAQUS)
-		
+			
 		ent = base.CollectEntities(constants.ABAQUS, None, "MEASUREMENT")#, filter_visible=True)
 		status = base.Not(ent, constants.ABAQUS)
 	
@@ -404,7 +437,7 @@ def showMessage(message):
 	label =guitk.BCLabelCreate(l, message)
 	guitk.BCDialogButtonBoxCreate(w)
 	guitk.BCShow(w)
-
+	
 # ==============================================================================
 
 def getStopDistance(clipFace, mateFace, centerCoordNode, direction=1):
