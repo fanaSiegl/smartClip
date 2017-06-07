@@ -97,6 +97,7 @@ class SmartClip(object):
 	def setBaseFaces(self):
 		
 		# selecting base CON defining the clip position
+		print('Select guiding clip edge - CON.')
 		selectedCons = base.PickEntities(constants.ABAQUS, "CONS")
 		
 		if selectedCons is None:
@@ -318,6 +319,7 @@ class SmartClip(object):
 		status = base.Not(ent, constants.ABAQUS)
 		
 		# create beams
+		print('Select nodes for beam definition: connector - clip contra side.')
 		beamNodes = base.PickEntities(constants.ABAQUS, "NODE", initial_entities = self.connectorNode)
 		beamNodes.remove(self.connectorNode)
 		
@@ -354,8 +356,8 @@ class SmartClip(object):
 			
 	
 	
-	
-		
+		# create beams
+		print('Select nodes for beam definition: connector - clip.')
 		beamNodes = base.PickEntities(constants.ABAQUS, "NODE", initial_entities = self.centerCoordNode)
 		beamNodes.remove(self.centerCoordNode)
 		
