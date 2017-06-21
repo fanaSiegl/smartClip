@@ -1,0 +1,29 @@
+# PYTHON script
+import ansa
+from ansa import constants
+import smartClip_dialog_pluginUser
+import beta
+
+class plinfos:
+	
+	def __init__(self):
+		self.title = ''''''
+		self.author = ''''''
+		self.hostApplication = ''''''
+		self.minHostApplicationVersion = ''''''
+		self.description = ''''''
+		self.menuEntry = ''''''
+		self.category = []
+		self.wikiUrl = ''''''
+
+		#PATH OF MAIN FILE (mandatory) 
+		self.filepath = '/data/fem/users/siegl/tools/repos/ansa/smartClip/smartClip_wizard.py'
+
+		#BUTTONS OF PLUGIN
+		#KEY(string):	"GROUPNAME:::BUTTONLABEL" or "BUTTONLABEL"
+		#VALUE(tuple):	("FUNCTIONNAME","FUNCTION'S TIP","FUNCTION'S HELP","FUNCTION'S IMAGE PATH") 
+		self.Buttons = {'Tool:::SmartClip':('main','Automatic Clip generator','','/data/fem/users/siegl/tools/repos/ansa/smartClip/paper_clip.png')}
+
+x= plinfos()
+beta.setPluginInfos(x)
+
