@@ -8,13 +8,14 @@ from ansa import constants
 
 import smartClip
 
-import imp
-#imp.reload(smartClip)
-
-
 # ==============================================================================
 
 PATH_SELF = os.path.dirname(os.path.abspath(__file__))
+
+sys.path.append(PATH_SELF)
+
+#import imp
+#imp.reload(smartClip)
 
 # ==============================================================================
 
@@ -548,8 +549,8 @@ class SmartClipDialog(object):
 
 # ==============================================================================
 
-@ansa.session.defbutton('Mesh', 'SmartClip')
-def runSmartClip():
+@ansa.session.defbutton('Tool', 'SmartClip')
+def main():
 	try:
 		dialog = SmartClipDialog()
 	except Exception as e:
@@ -557,7 +558,7 @@ def runSmartClip():
 
 # ==============================================================================
 
-#if __name__ == '__main__':
-#	runSmartClip()
+if __name__ == '__main__':
+	main()
 
 		

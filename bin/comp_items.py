@@ -5,6 +5,7 @@ import ansa
  
 from ansa import base, constants, guitk
 
+
 # ==============================================================================
 
 class SmartClipException(Exception): pass
@@ -13,8 +14,18 @@ class SmartClipException(Exception): pass
 # ==============================================================================
 
 class SmartClip(object):
-		
+	
 	def __init__(self):
+		
+		self.selectedCon = None
+		self.beamNodesCs = None
+		self.beamNodesCcs = None
+		
+		self.stopDistanceMeasurements = list()
+	
+	#-------------------------------------------------------------------------
+    
+	def run(self):
 		
 		try:
 			self.setBaseFaces()
@@ -23,6 +34,7 @@ class SmartClip(object):
 			
 			self.setStopDistances()
 			self.createCoorSystem()
+			
 			self.createConnector()
 			self.createBeams()
 		except SmartClipException as e:
@@ -30,7 +42,7 @@ class SmartClip(object):
 	    
     #-------------------------------------------------------------------------
     
-	def _getPointProjectionCoords(self, faces, pointCoords, vector, tolerance=50):
+	def _getPointProjectionCoords(self, faces, pointCoords, vector, tolerance=50, searchedFaceName='face'):
 		    	
     	# check for point projection on opposite face
 		foundProjection = list()
@@ -55,7 +67,7 @@ class SmartClip(object):
 		
 		else:
 		#if projectedPointCoords is None:
-			showMessage("Projection to given faces not found within given tolerance of %s mm! Please select the face manually." % tolerance)
+			showMessage("Projection to given faces not found within given tolerance of %s mm! Please select the %s manually." % (tolerance, searchedFaceName))
 			face = set(base.PickEntities(constants.ABAQUS, "FACE"))
 			projectedPointCoords =ansa.base.ProjectPointDirectional(
 				face, pointCoords[0], pointCoords[1], pointCoords[2],
@@ -66,7 +78,10 @@ class SmartClip(object):
 	#-------------------------------------------------------------------------
 	
 	def _getStopDistance(self, clipFacePoint, mateFacePoint, direction=1):
-	
+
+# TODO: get rid of redundant measurement entities and use just 2 point distance
+# np.linalg.norm(np.array(clipFacePoint) - np.array(self.centerCoordNode))
+
 		# searching for distances
 		mNodeClipFace = ansa.base.CreateMeasurement([clipFacePoint, self.centerCoordNode], 'DISTANCE')
 		mNodeMateFace = ansa.base.CreateMeasurement([mateFacePoint, self.centerCoordNode], 'DISTANCE')	
@@ -76,6 +91,7 @@ class SmartClip(object):
 		
 		nodeFaceClipDist = getEntityProperty(mNodeClipFace, 'RESULT')
 		nodeFaceMateDist = getEntityProperty(mNodeMateFace, 'RESULT')
+		
 		#print(nodeFaceClipDist, nodeFaceMateDist)
 	
 		if nodeFaceClipDist > nodeFaceMateDist:
@@ -90,7 +106,15 @@ class SmartClip(object):
 		base.DeleteEntity(mNodeClipFace)
 		base.DeleteEntity(mNodeMateFace)
 		
+		self.stopDistanceMeasurements.append(mFace2face)
+		
 		return faceDist*direction
+	
+	#-------------------------------------------------------------------------
+    
+	def hideAllFaces(self):
+		ent = base.CollectEntities(constants.ABAQUS, None, "FACE", filter_visible=True )
+		status = base.Not(ent, constants.ABAQUS)
 		
 	#-------------------------------------------------------------------------
     
@@ -101,6 +125,7 @@ class SmartClip(object):
 		selectedCons = base.PickEntities(constants.ABAQUS, "CONS")
 		
 		if selectedCons is None:
+			self.selectedCon = None
 			raise(SmartClipException('No guiding CON selected!'))
 			
 			
@@ -149,7 +174,7 @@ class SmartClip(object):
 		
 		self.oppositeProjectionVector = -1*np.array(self.largeFaceNormal)
 		self.oppositeFace, self.oppositeFacePointCoords = self._getPointProjectionCoords(
-			clipFaces, self.middlePointCoords, self.oppositeProjectionVector)
+			clipFaces, self.middlePointCoords, self.oppositeProjectionVector, searchedFaceName='z lower face - clip side')
 		self.oppositeFacePoint = base.Newpoint(*self.oppositeFacePointCoords)
 		
 		# front face point
@@ -161,13 +186,13 @@ class SmartClip(object):
 		
 		# find coordinates for coordinate system
 		self.centerCoordPointCoords = np.median([self.oppositeFacePointCoords, self.middlePointCoords], axis=0)
-		base.Newpoint(*self.centerCoordPointCoords)
+		#base.Newpoint(*self.centerCoordPointCoords)
 		
 		# find side faces		
 		searchOnFaces = self.clipFaces[:]
 		self.sideProjectionVectorPlus = np.cross(self.smallFaceNormal, self.oppositeProjectionVector)
 		self.sideFacePlus, sidePlusPointCoords = self._getPointProjectionCoords(
-			searchOnFaces, self.centerCoordPointCoords, self.sideProjectionVectorPlus)
+			searchOnFaces, self.centerCoordPointCoords, self.sideProjectionVectorPlus, searchedFaceName='x upper face - clip side')
 		# move a point lower
 		self.sidePlusPointCoords = sidePlusPointCoords + 1*np.array(self.smallFaceNormal)
 		self.sideFacePlusPoint = base.Newpoint(*self.sidePlusPointCoords)
@@ -175,7 +200,7 @@ class SmartClip(object):
 		searchOnFaces.remove(self.sideFacePlus)
 		self.sideProjectionVectorMinus = np.cross(self.oppositeProjectionVector, self.smallFaceNormal)
 		self.sideFaceMinus, sideMinusPointCoords = self._getPointProjectionCoords(
-			searchOnFaces, self.centerCoordPointCoords, self.sideProjectionVectorMinus)
+			searchOnFaces, self.centerCoordPointCoords, self.sideProjectionVectorMinus, searchedFaceName='x lower face - clip side')
 		# move a point lower
 		self.sideMinusPointCoords = sideMinusPointCoords + 1*np.array(self.smallFaceNormal)
 		self.sideFaceMinusPoint = base.Newpoint(*self.sideMinusPointCoords)
@@ -184,9 +209,8 @@ class SmartClip(object):
     
 	def createNodesForConnector(self):
 		
-		fstHPcoords, scndHPcoords = getConsHotPointCoords(self.selectedCon)
-		self.thirdPointCoords = np.median([scndHPcoords, self.middlePointCoords], axis=0)
-		
+		self.thirdPointCoords = np.array(self.middlePointCoords)+np.array(self.sideProjectionVectorPlus)
+				
 		# create nodes for entities
 		connectorNodeVector = self.middlePointCoords - self.centerCoordPointCoords
 		connectorNodeNorm = connectorNodeVector/ np.linalg.norm(connectorNodeVector)
@@ -199,7 +223,7 @@ class SmartClip(object):
 	
 	#-------------------------------------------------------------------------
     
-	def setStopDistances(self):
+	def setStopDistances(self, hideMeasurements=True):
 		
 		# searching for distances
 		# show only relevant entities
@@ -218,25 +242,25 @@ class SmartClip(object):
 		
 		# find opposite projection mate
 		self.oppositeNeighbourFace, self.oppositeNeighbourFacePointCoords = self._getPointProjectionCoords(
-			self.neighbourFaces, self.oppositeFacePointCoords, self.oppositeProjectionVector)
+			self.neighbourFaces, self.oppositeFacePointCoords, self.oppositeProjectionVector, searchedFaceName='z lower face - clip contra side')
 		self.oppositeNeighbourFacePoint = base.Newpoint(*self.oppositeNeighbourFacePointCoords)
 		self.zLow = 1+self._getStopDistance(self.oppositeFacePoint, self.oppositeNeighbourFacePoint, -1)
 		
 		# find front projection mate
 		self.frontNeighbourFace, self.frontNeighbourFacePointCoords = self._getPointProjectionCoords(
-			self.neighbourFaces, self.frontFacePointCoords, self.largeFaceNormal)
+			self.neighbourFaces, self.frontFacePointCoords, self.largeFaceNormal, searchedFaceName='z upper face - clip contra side')
 		self.frontNeighbourFacePoint = base.Newpoint(*self.frontNeighbourFacePointCoords)
 		self.zUp = 1+self._getStopDistance(self.frontFacePoint, self.frontNeighbourFacePoint)
 		
 		# find side plus projection mate
 		self.sidePlusNeighbourFace, self.sidePlusNeighbourFacePointCoords = self._getPointProjectionCoords(
-			self.neighbourFaces, self.sidePlusPointCoords, self.sideProjectionVectorPlus)
+			self.neighbourFaces, self.sidePlusPointCoords, self.sideProjectionVectorPlus, searchedFaceName='x upper face - clip contra side')
 		self.sidePlusNeighbourFacePoint = base.Newpoint(*self.sidePlusNeighbourFacePointCoords)
 		self.xUp = self._getStopDistance(self.sideFacePlusPoint, self.sidePlusNeighbourFacePoint)
 		
 		# find side minus projection mate
 		self.sideMinusNeighbourFace, self.sideMinusNeighbourFacePointCoords = self._getPointProjectionCoords(
-			self.neighbourFaces, self.sideMinusPointCoords, self.sideProjectionVectorMinus)
+			self.neighbourFaces, self.sideMinusPointCoords, self.sideProjectionVectorMinus, searchedFaceName='x lower face - clip contra side')
 		self.sideMinusNeighbourFacePoint = base.Newpoint(*self.sideMinusNeighbourFacePointCoords)
 		self.xLow = self._getStopDistance(self.sideFaceMinusPoint, self.sideMinusNeighbourFacePoint, -1)
 		
@@ -247,7 +271,7 @@ class SmartClip(object):
 		self.topPoint = base.Newpoint(*self.topPointCoords)
 		
 		self.topNeighbourFace, self.topNeighbourFacePointCoords = self._getPointProjectionCoords(
-			self.neighbourFaces, self.topPointCoords, self.smallFaceNormal)
+			self.neighbourFaces, self.topPointCoords, self.smallFaceNormal, searchedFaceName='y upper face - clip contra side')
 		self.topNeighbourFacePoint = base.Newpoint(*self.topNeighbourFacePointCoords)
 		self.yUp = self._getStopDistance(self.topPoint, self.topNeighbourFacePoint)
 		
@@ -255,13 +279,41 @@ class SmartClip(object):
 		
 		#print(xLow, xUp, yUp, yLow, zLow, zUp)
 		status = base.And(ent, constants.ABAQUS)
+		
+		if hideMeasurements:
+			self.hideMeasurements()
+		
+	#-------------------------------------------------------------------------
+    
+	def hideMeasurements(self):
+		
+		status = base.Not(self.stopDistanceMeasurements, constants.ABAQUS)
+	
+	#-------------------------------------------------------------------------
+    
+	def hidePoints(self):
+		
+		entities = [
+			self.oppositeFacePoint,
+			self.frontFacePoint,
+			self.sideFacePlusPoint,
+			self.sideFaceMinusPoint,
 			
-		ent = base.CollectEntities(constants.ABAQUS, None, "MEASUREMENT")#, filter_visible=True)
-		status = base.Not(ent, constants.ABAQUS)
+			
+			self.oppositeNeighbourFacePoint,
+			self.frontNeighbourFacePoint,
+			self.sidePlusNeighbourFacePoint,
+			self.sideMinusNeighbourFacePoint,
+			self.topPoint,
+			self.topNeighbourFacePoint,
+			]
+		
+		status = base.Not(entities, constants.ABAQUS)
 	
 	#-------------------------------------------------------------------------
     
 	def createCoorSystem(self):
+		
 		# create coordinate system
 		vals = {'Name': 'CLIP_COOR_SYS',
 			'A1':  self.centerCoordPointCoords[0], 'A2':  self.centerCoordPointCoords[1], 'A3':  self.centerCoordPointCoords[2],
@@ -272,6 +324,7 @@ class SmartClip(object):
 	#-------------------------------------------------------------------------
     
 	def createConnector(self):
+		
 		# create connector elasticity
 		vals = {'Name': 'CONNECTOR ELASTICITY',
 			 'COMP': 'YES',
@@ -314,16 +367,28 @@ class SmartClip(object):
     
 	def createBeams(self):
 		
-		# hide geometry
-		ent = base.CollectEntities(constants.ABAQUS, None, "FACE", filter_visible=True )
-		status = base.Not(ent, constants.ABAQUS)
+		self.hideAllFaces()
+		
+		self.createBeamsConnectorClipSide()
+		self.createBeamsConnectorClipContraSide()
+	
+	#-------------------------------------------------------------------------
+    
+	def createBeamsConnectorClipContraSide(self):
 		
 		# create beams
-		print('Select nodes for beam definition: connector - clip contra side.')
-		beamNodes = base.PickEntities(constants.ABAQUS, "NODE", initial_entities = self.connectorNode)
-		beamNodes.remove(self.connectorNode)
+		print('Select nodes for beam definition: CONNECTOR - CLIP contra side.')
+		self.beamNodesCcs = base.PickEntities(constants.ABAQUS, "NODE", initial_entities = self.connectorNode)
+		try:
+			self.beamNodesCcs.remove(self.connectorNode)
+		except:
+			self.beamNodesCcs = None
+			raise(SmartClipException('No NODES selected for CONNECTOR - CLIP contra side!'))
+		if len(self.beamNodesCs) == 0:
+			self.beamNodesCcs = None
+			raise(SmartClipException('No NODES selected for CONNECTOR - CLIP contra side!'))
 		
-		elements = base.NodesToElements(beamNodes)
+		elements = base.NodesToElements(self.beamNodesCcs)
 	#TODO: check if all nodes belong to the one property!!
 		allElements = list()
 		for elements in list(elements.values()):
@@ -331,12 +396,14 @@ class SmartClip(object):
 		element = sortEntities(allElements, allElements.count)[-1]
 		
 		# beam properties
-		prop = base.GetEntity(constants.NASTRAN, 'PSHELL', getEntityProperty(element, 'PID'))
-		material = base.GetEntity(constants.ABAQUS, 'MATERIAL', getEntityProperty(prop, 'MID'))
+		self.beamPropCcs = base.GetEntity(constants.NASTRAN, 'PSHELL', getEntityProperty(element, 'PID'))
+		material = base.GetEntity(constants.ABAQUS, 'MATERIAL', getEntityProperty(self.beamPropCcs, 'MID'))
+		
+		self.beamCcsMID = getEntityProperty(self.beamPropCcs, 'MID')
 		
 		# create beam section
 		vals = {'Name': 'BEAM_SECTION',
-			'TYPE_':'SECTION', 'MID': getEntityProperty(prop, 'MID'),
+			'TYPE_':'SECTION', 'MID': self.beamCcsMID,
 			'SECTION': 'CIRC', 'TYPE':'B31', 'optional2':'H',
 			'RADIUS' : 5, 
 			'C1' : 0, 'C2' : 1, 'C3' : -1,
@@ -344,24 +411,36 @@ class SmartClip(object):
 			#'E' : getEntityProperty(material, 'YOUNG'),
 			#'G' :  getEntityProperty(material, 'YOUNG')/(2*(1+getEntityProperty(material, 'POISSON')))
 				}
-		self.beamSection = base.CreateEntity(constants.ABAQUS, "BEAM_SECTION", vals)
+		self.beamSectionCcs = base.CreateEntity(constants.ABAQUS, "BEAM_SECTION", vals)
 		
-		for node in beamNodes:
+		self.beamsCcs = list()
+		for node in self.beamNodesCcs:
 			vals = {'Name': 'BEAM',
-				'PID': self.beamSection._id,
+				'PID': self.beamSectionCcs._id,
 				'NODE1': self.connectorNode._id,
 				'NODE2': node._id,
 				'Orient': 'With Vector', 'C1' : 0, 'C2' : 1, 'C3' : -1,}
 			beam = base.CreateEntity(constants.ABAQUS, "BEAM", vals)
+			self.beamsCcs.append(beam)
 			
-	
-	
-		# create beams
-		print('Select nodes for beam definition: connector - clip.')
-		beamNodes = base.PickEntities(constants.ABAQUS, "NODE", initial_entities = self.centerCoordNode)
-		beamNodes.remove(self.centerCoordNode)
+	#-------------------------------------------------------------------------
+    
+	def createBeamsConnectorClipSide(self):
 		
-		elements = base.NodesToElements(beamNodes)
+		# create beams
+		print('Select nodes for beam definition: CONNECTOR - CLIP.')
+		self.beamNodesCs = base.PickEntities(constants.ABAQUS, "NODE", initial_entities = self.centerCoordNode)
+		
+		try:
+			self.beamNodesCs.remove(self.centerCoordNode)
+		except:
+			self.beamNodesCs = None
+			raise(SmartClipException('No NODES selected for CONNECTOR - CLIP!'))
+		if len(self.beamNodesCs) == 0:
+			self.beamNodesCs = None
+			raise(SmartClipException('No NODES selected for CONNECTOR - CLIP!'))
+		
+		elements = base.NodesToElements(self.beamNodesCs)
 	#TODO: check if all nodes belong to the one property!!
 		allElements = list()
 		for elements in list(elements.values()):
@@ -369,12 +448,14 @@ class SmartClip(object):
 		element = sortEntities(allElements, allElements.count)[-1]
 		
 		# beam properties
-		prop = base.GetEntity(constants.NASTRAN, 'PSHELL', getEntityProperty(element, 'PID'))
-		material = base.GetEntity(constants.ABAQUS, 'MATERIAL', getEntityProperty(prop, 'MID'))
+		self.beamPropCs = base.GetEntity(constants.NASTRAN, 'PSHELL', getEntityProperty(element, 'PID'))
+		material = base.GetEntity(constants.ABAQUS, 'MATERIAL', getEntityProperty(self.beamPropCs, 'MID'))
+		
+		self.beamCsMID = getEntityProperty(self.beamPropCs, 'MID')
 		
 		# create beam section
 		vals = {'Name': 'BEAM_SECTION',
-			'TYPE_':'SECTION', 'MID': getEntityProperty(prop, 'MID'),
+			'TYPE_':'SECTION', 'MID': self.beamCsMID,
 			'SECTION': 'CIRC', 'TYPE':'B31', 'optional2':'H',
 			'RADIUS' : 5, 
 			'C1' : 0, 'C2' : 1, 'C3' : -1,
@@ -382,37 +463,33 @@ class SmartClip(object):
 			#'E' : getEntityProperty(material, 'YOUNG'),
 			#'G' :  getEntityProperty(material, 'YOUNG')/(2*(1+getEntityProperty(material, 'POISSON')))
 				}
-		beamSection = base.CreateEntity(constants.ABAQUS, "BEAM_SECTION", vals)
+		self.beamSectionCs= base.CreateEntity(constants.ABAQUS, "BEAM_SECTION", vals)
 		
-		for node in beamNodes:
+		self.beamsCs = list()
+		for node in self.beamNodesCs:
 			vals = {'Name': 'BEAM',
-				'PID': beamSection._id,
+				'PID': self.beamSectionCs._id,
 				'NODE1': self.centerCoordNode._id,
 				'NODE2': node._id,
 				'Orient': 'With Vector', 'C1' : 0, 'C2' : 1, 'C3' : -1,}
 			beam = base.CreateEntity(constants.ABAQUS, "BEAM", vals)
+			self.beamsCs.append(beam)
 		
-		
-		#base.PickEntities(constants.ABAQUS, "CONS", initial_entities = smallFaceCons)#[selectedCon, opositeCon])
-		#base.PickEntities(constants.ABAQUS, "CONS", initial_entities = largeFaceCons)
-		
-		#ansa.calc.ProjectPointToCons(x_y_z, cons)
-		#ansa.calc.ProjectPointToContainer(coords, entities)
-		#ansa.base.Newpoint(x, y, z)
-		#ansa.base.Neighb(number_of_steps)
-		#mat = base.GetFaceOrientation(face)
-		#status = base.Or(deck=constants.ABAQUS, keyword = "MAT1", id = 23)
-		#nsa.base.DeleteEntity(entities, force)
 
 # ==============================================================================
 
 def showMessage(message):
-	w = guitk.BCWindowCreate('Missing entity', guitk.constants.BCOnExitDestroy)
-	f = guitk.BCFrameCreate(w)
-	l = guitk.BCBoxLayoutCreate(f, guitk.constants.BCHorizontal)
-	label =guitk.BCLabelCreate(l, message)
-	guitk.BCDialogButtonBoxCreate(w)
-	guitk.BCShow(w)
+	#w = guitk.BCWindowCreate('Missing entity', guitk.constants.BCOnExitDestroy)
+	#f = guitk.BCFrameCreate(w)
+	#l = guitk.BCBoxLayoutCreate(f, guitk.constants.BCHorizontal)
+	#label =guitk.BCLabelCreate(l, message)
+	#guitk.BCDialogButtonBoxCreate(w)
+	#guitk.BCShow(w)
+	
+	messageWindow = guitk.BCMessageWindowCreate(guitk.constants.BCMessageBoxInformation, message, True)
+	guitk.BCMessageWindowSetAcceptButtonText(messageWindow, "OK")
+	guitk.BCMessageWindowSetRejectButtonVisible(messageWindow, False)
+	answer = guitk.BCMessageWindowExecute(messageWindow)
 	
 # ==============================================================================
 
@@ -524,7 +601,7 @@ def getEntityProperty(entity, propertyName):
 # ==============================================================================
 
 @ansa.session.defbutton('Mesh', 'SmartClip')
-def smartClip():
+def runSmartClip():
 	
 	'''"SmartClip" tool is an utility to make the clip definition as easy as possible.
 	
@@ -544,10 +621,13 @@ NOTE:
 	Keep FEM model visible (visib switch on) in the time of guiding CON selection for the best result.
 '''
 	
-	smartClip = SmartClip()
+	sc = SmartClip()
+	sc.run()
 	
 # ==============================================================================
 
 #if __name__ == '__main__':
-#	smartClip()
+#	
+#	runSmartClip()
+
 

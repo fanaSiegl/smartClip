@@ -1,7 +1,6 @@
 # PYTHON script
 import ansa
 from ansa import constants
-import smartClip_dialog_pluginUser
 import beta
 
 class plinfos:
