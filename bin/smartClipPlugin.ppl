@@ -1,27 +1,37 @@
 # PYTHON script
+
+import os
+import sys
+
 import ansa
 from ansa import constants
 import beta
 
+import util
+
+ICON_PATH = os.path.join(util.PATH_RES, 'icons','clip_icon.png')
+
+# ==============================================================================
+
 class plinfos:
 	
 	def __init__(self):
-		self.title = ''''''
-		self.author = ''''''
+		self.title = '''Automatic CLIP generator'''
+		self.author = '''IDIADA CZ '''
 		self.hostApplication = ''''''
 		self.minHostApplicationVersion = ''''''
-		self.description = ''''''
+		self.description = util.DESCRIPTION
 		self.menuEntry = ''''''
 		self.category = []
 		self.wikiUrl = ''''''
 
 		#PATH OF MAIN FILE (mandatory) 
-		self.filepath = '/data/fem/users/siegl/tools/repos/ansa/smartClip/smartClip_wizard.py'
+		self.filepath =os.path.join(util.PATH_BIN, 'main.py')
 
 		#BUTTONS OF PLUGIN
 		#KEY(string):	"GROUPNAME:::BUTTONLABEL" or "BUTTONLABEL"
 		#VALUE(tuple):	("FUNCTIONNAME","FUNCTION'S TIP","FUNCTION'S HELP","FUNCTION'S IMAGE PATH") 
-		self.Buttons = {'Tool:::SmartClip':('main','Automatic Clip generator','','/data/fem/users/siegl/tools/repos/ansa/smartClip/paper_clip.png')}
+		self.Buttons = {'Tool:::SmartClip':('main','Automatic Clip generator','', ICON_PATH)}
 
 x= plinfos()
 beta.setPluginInfos(x)

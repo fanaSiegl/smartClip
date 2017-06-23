@@ -384,7 +384,8 @@ class SmartClip(object):
 		except:
 			self.beamNodesCcs = None
 			raise(SmartClipException('No NODES selected for CONNECTOR - CLIP contra side!'))
-		if len(self.beamNodesCs) == 0:
+		
+		if len(self.beamNodesCcs) == 0:
 			self.beamNodesCcs = None
 			raise(SmartClipException('No NODES selected for CONNECTOR - CLIP contra side!'))
 		
@@ -436,6 +437,7 @@ class SmartClip(object):
 		except:
 			self.beamNodesCs = None
 			raise(SmartClipException('No NODES selected for CONNECTOR - CLIP!'))
+
 		if len(self.beamNodesCs) == 0:
 			self.beamNodesCs = None
 			raise(SmartClipException('No NODES selected for CONNECTOR - CLIP!'))
@@ -600,7 +602,7 @@ def getEntityProperty(entity, propertyName):
 
 # ==============================================================================
 
-@ansa.session.defbutton('Mesh', 'SmartClip')
+#@ansa.session.defbutton('Mesh', 'SmartClip')
 def runSmartClip():
 	
 	'''"SmartClip" tool is an utility to make the clip definition as easy as possible.
