@@ -9,13 +9,18 @@ from ansa import base, guitk, constants
 # ==============================================================================
 
 PATH_BIN = os.path.dirname(os.path.abspath(__file__))
+PATH_RES = os.path.normpath(os.path.join(PATH_BIN, '..', 'res'))
 
 try:
 	sys.path.append(PATH_BIN)
 	import util
+	import comp_items
+	
+	print('Runnig devel version ', __file__)
 	
 except ImportError as e:
 	ansa.ImportCode(os.path.join(PATH_BIN, 'util.py'))
+	ansa.ImportCode(os.path.join(PATH_BIN, 'comp_items.py'))
 	
 # ==============================================================================
 
@@ -81,7 +86,6 @@ class StackWidgetPage(object):
 	def __init__(self, parent, label, description=''):
 		
 		self.parent =parent
-		self.smartClip = self.parent.smartClip
 		self.label = label
 		self.description = description
 		self.parentWidget = self.parent.mainWindow
@@ -98,6 +102,12 @@ class StackWidgetPage(object):
 		guitk.BCSpacerCreate(self.contentLayout)
 
 		guitk.BCWizardAddPage(self.parentWidget, self.frame, self.label, self.description,  "")
+	
+	#-------------------------------------------------------------------------
+   
+	def smartClip(self):
+		
+		 return self.parent.getSmartClip()
 			
 	#-------------------------------------------------------------------------
    
@@ -174,20 +184,20 @@ class SelectConPage(StackWidgetPage):
 	def conSelected(self, buttonWidget=None, data=None):
 		
 		# reset selection and propt the new one
-		self.smartClip.selectedCon = None
+		self.smartClip().selectedCon = None
 		self.parent.controller(None, None, 1, None)
 	
 	#-------------------------------------------------------------------------
     
 	def updateInfo(self):
 		
-		self._setInfoAttributeValue('selectedCONid', 'ID %s' % self.smartClip.selectedCon._id)
-		self._setInfoAttributeValue('xLow', self.smartClip.xLow)
-		self._setInfoAttributeValue('xUp', self.smartClip.xUp)
-		self._setInfoAttributeValue('yLow', self.smartClip.yLow)
-		self._setInfoAttributeValue('yUp', self.smartClip.yUp)
-		self._setInfoAttributeValue('zLow', self.smartClip.zLow)
-		self._setInfoAttributeValue('zUp', self.smartClip.zUp)
+		self._setInfoAttributeValue('selectedCONid', 'ID %s' % self.smartClip().selectedCon._id)
+		self._setInfoAttributeValue('xLow', self.smartClip().xLow)
+		self._setInfoAttributeValue('xUp', self.smartClip().xUp)
+		self._setInfoAttributeValue('yLow', self.smartClip().yLow)
+		self._setInfoAttributeValue('yUp', self.smartClip().yUp)
+		self._setInfoAttributeValue('zLow', self.smartClip().zLow)
+		self._setInfoAttributeValue('zUp', self.smartClip().zUp)
 		
 		#yLow
 
@@ -209,17 +219,17 @@ class SelectClipNodesPage(StackWidgetPage):
 	def nodesSelected(self, buttonWidget=None, data=None):
 		
 		# reset selection and propt the new one
-		self.smartClip.beamNodesCs = None
+		self.smartClip().beamNodesCs = None
 		self.parent.controller(None, None, 2, None)
 	
 	#-------------------------------------------------------------------------
     
 	def updateInfo(self):
 		
-		self._setInfoAttributeValue('noOfNodes', len(self.smartClip.beamNodesCs))
+		self._setInfoAttributeValue('noOfNodes', len(self.smartClip().beamNodesCs))
 		
-		#self._setInfoAttributeValue('noOfNodes', '%s (%s)' % (len(self.smartClip.beamNodesCs), ' '.join([str(node._id) for node in self.smartClip.beamNodesCs])))
-		self._setInfoAttributeValue('beamMID', self.smartClip.beamCsMID)
+		#self._setInfoAttributeValue('noOfNodes', '%s (%s)' % (len(self.smartClip().beamNodesCs), ' '.join([str(node._id) for node in self.smartClip().beamNodesCs])))
+		self._setInfoAttributeValue('beamMID', self.smartClip().beamCsMID)
 		
 		
 # ==============================================================================
@@ -229,15 +239,15 @@ class SelectClipContraNodesPage(SelectClipNodesPage):
 	def nodesSelected(self, buttonWidget=None, data=None):
 		
 		# reset selection and propt the new one
-		self.smartClip.beamNodesCcs = None
+		self.smartClip().beamNodesCcs = None
 		self.parent.controller(None, None, 3, None)
 	
 	#-------------------------------------------------------------------------
     
 	def updateInfo(self):
 		
-		self._setInfoAttributeValue('noOfNodes', len(self.smartClip.beamNodesCcs))
-		self._setInfoAttributeValue('beamMID', self.smartClip.beamCcsMID)
+		self._setInfoAttributeValue('noOfNodes', len(self.smartClip().beamNodesCcs))
+		self._setInfoAttributeValue('beamMID', self.smartClip().beamCcsMID)
 
 # ==============================================================================
 
@@ -258,7 +268,7 @@ class SelectClipTypePage(StackWidgetPage):
 		
 		# manufacturer selector
 		label = guitk.BCLabelCreate(self.contentLayout, 'Select CLIP beam type')
-		clipTypeOptions = ['AUDI', 'SKODA']
+		clipTypeOptions = list(comp_items.clipTypeRegistry.keys())
 		self.clipBeamTypeComboBox = guitk.BCComboBoxCreate(self.contentLayout, clipTypeOptions)
 		
 		guitk.BCGridLayoutAddWidget(self.contentLayout, label, 2, 0, guitk.constants.BCAlignLeft)
@@ -274,9 +284,14 @@ class SelectClipTypePage(StackWidgetPage):
 		# set initial values
 		guitk.BCComboBoxSetCurrentItem(self.clipBeamTypeComboBox, self.parent.DFT_TYPE_BEAM)
 		guitk.BCComboBoxSetCurrentItem(self.clipGeomTypeComboBox, self.parent.DFT_TYPE_GEOM)
-		
+
+
+		guitk.BCLabelSetIconFileName(self.beamTypeInfo_label, self.smartClip().ICON)
+		self._setInfoAttributeValue('beamTypeInfo', self.smartClip().INFO)
+
+#TODO: this will be replaced with other geometrical types loaded from comp_items		
 		self.geomTypeChanged(self.clipGeomTypeComboBox, self.parent.DFT_TYPE_GEOM, None)
-		self.beamTypeChanged(self.clipBeamTypeComboBox, self.parent.DFT_TYPE_BEAM, None)
+		#self.beamTypeChanged(self.clipBeamTypeComboBox, self.parent.DFT_TYPE_BEAM, None)
 	
 	#-------------------------------------------------------------------------
 
@@ -287,9 +302,9 @@ class SelectClipTypePage(StackWidgetPage):
 		
 		
 		if index == 0:
-			guitk.BCLabelSetIconFileName(self.geomTypeInfo_label, os.path.join(util.PATH_RES, 'icons', 'clip_geom_standart.png'))
+			guitk.BCLabelSetIconFileName(self.geomTypeInfo_label, os.path.join(PATH_RES, 'icons', 'clip_geom_standart.png'))
 		elif index == 1:
-			guitk.BCLabelSetIconFileName(self.geomTypeInfo_label, os.path.join(util.PATH_RES, 'icons','clip_geom_example.png'))
+			guitk.BCLabelSetIconFileName(self.geomTypeInfo_label, os.path.join(PATH_RES, 'icons','clip_geom_example.png'))
 
 		self.parent.setDftTypeGeom(index)
 	
@@ -297,11 +312,14 @@ class SelectClipTypePage(StackWidgetPage):
 
 	def beamTypeChanged(self, comboBox, index, data):
 		
-		self._setInfoAttributeValue('beamTypeInfo', 'This is an info about beam structure of the type: %s.' % index)
+		beamType = guitk.BCComboBoxGetText(comboBox, index)
+		self.parent.setTypeBeam(index, beamType)
 		
-		guitk.BCLabelSetIconFileName(self.beamTypeInfo_label, os.path.join(util.PATH_RES, 'icons', 'clip_beam_audi.png'))
+		self._setInfoAttributeValue('beamTypeInfo', self.smartClip().INFO)
+				
+		guitk.BCLabelSetIconFileName(self.beamTypeInfo_label, self.smartClip().ICON)
 
-		self.parent.setDftTypeBeam(index)
+		
 		
 # ==============================================================================
 

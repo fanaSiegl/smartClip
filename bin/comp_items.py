@@ -1,5 +1,6 @@
 # PYTHON script
 import os
+import sys
 import numpy as np
 import ansa
  
@@ -8,12 +9,42 @@ from ansa import base, constants, guitk
 
 # ==============================================================================
 
-class SmartClipException(Exception): pass
-
+PATH_BIN = os.path.dirname(os.path.abspath(__file__))
+PATH_RES = os.path.normpath(os.path.join(PATH_BIN, '..', 'res'))
+try:
+	sys.path.append(PATH_BIN)
+	import util
+	
+	print('Runnig devel version ', __file__)
+	
+except ImportError as e:
+	ansa.ImportCode(os.path.join(PATH_BIN, 'util.py'))
 	
 # ==============================================================================
 
-class SmartClip(object):
+class SmartClipException(Exception): pass
+
+# ==============================================================================
+
+clipTypeRegistry = {}
+   
+class MetaClass(type):
+    def __new__(cls, clsname, bases, attrs):
+        newclass = super(MetaClass, cls).__new__(cls, clsname, bases, attrs)
+        
+        clipTypeRegistry[newclass.TYPE_NAME] = newclass
+        return newclass
+        	
+# ==============================================================================
+
+class AudiClipType(metaclass=MetaClass):
+	
+	TYPE_NAME = 'AUDI'
+	INFO ='AUDI CONNECTOR type clip consists of 1 connector element and beams joining connector with a clip and its contra side.'
+	ICON = os.path.join(PATH_RES, 'icons', 'clip_beam_audi.png')
+	
+	CONNECTOR_ELASTICITY = [50, 50, 50]
+	CONNECTOR_LENGTH = 1.0
 	
 	def __init__(self):
 		
@@ -39,7 +70,7 @@ class SmartClip(object):
 			self.createBeams()
 		except SmartClipException as e:
 			print(str(e))
-	    
+		    
     #-------------------------------------------------------------------------
     
 	def _getPointProjectionCoords(self, faces, pointCoords, vector, tolerance=50, searchedFaceName='face'):
@@ -208,18 +239,17 @@ class SmartClip(object):
 	#-------------------------------------------------------------------------
     
 	def createNodesForConnector(self):
-		
-		self.thirdPointCoords = np.array(self.middlePointCoords)+np.array(self.sideProjectionVectorPlus)
 				
 		# create nodes for entities
 		connectorNodeVector = self.middlePointCoords - self.centerCoordPointCoords
 		connectorNodeNorm = connectorNodeVector/ np.linalg.norm(connectorNodeVector)
-		connectorNodeCoords = self.centerCoordPointCoords+1*connectorNodeNorm
+		connectorNodeCoords = self.centerCoordPointCoords+self.CONNECTOR_LENGTH*connectorNodeNorm
 	
-		self.connectorNode = base.CreateEntity(constants.ABAQUS, "NODE", 
-			 {'X': connectorNodeCoords[0], 'Y': connectorNodeCoords[1], 'Z': connectorNodeCoords[2]})
-		self.centerCoordNode = base.CreateEntity(constants.ABAQUS, "NODE", 
-			 {'X': self.centerCoordPointCoords[0], 'Y': self.centerCoordPointCoords[1], 'Z': self.centerCoordPointCoords[2]})
+		#self.connectorNode = createNode(connectorNodeCoords)
+		self.centerCoordNode = createNode(self.centerCoordPointCoords)
+	
+		self.connectingBeamsCenterNode1 = createNode(self.centerCoordPointCoords)
+		self.connectingBeamsCenterNode2 = createNode(connectorNodeCoords)
 	
 	#-------------------------------------------------------------------------
     
@@ -314,6 +344,8 @@ class SmartClip(object):
     
 	def createCoorSystem(self):
 		
+		self.thirdPointCoords = np.array(self.middlePointCoords)+np.array(self.sideProjectionVectorPlus)
+		
 		# create coordinate system
 		vals = {'Name': 'CLIP_COOR_SYS',
 			'A1':  self.centerCoordPointCoords[0], 'A2':  self.centerCoordPointCoords[1], 'A3':  self.centerCoordPointCoords[2],
@@ -328,9 +360,9 @@ class SmartClip(object):
 		# create connector elasticity
 		vals = {'Name': 'CONNECTOR ELASTICITY',
 			 'COMP': 'YES',
-			 'COMP(1)': 'YES', 'El.Stiff.(1)': 50.0,
-			 'COMP(2)': 'YES', 'El.Stiff.(2)': 50.0,
-			 'COMP(3)': 'YES', 'El.Stiff.(3)': 50.0
+			 'COMP(1)': 'YES', 'El.Stiff.(1)': self.CONNECTOR_ELASTICITY[0],
+			 'COMP(2)': 'YES', 'El.Stiff.(2)': self.CONNECTOR_ELASTICITY[1],
+			 'COMP(3)': 'YES', 'El.Stiff.(3)': self.CONNECTOR_ELASTICITY[2],
 			}
 		self.connectorElasticity = base.CreateEntity(constants.ABAQUS, "CONNECTOR_ELASTICITY", vals)
 	
@@ -360,7 +392,7 @@ class SmartClip(object):
 		# create a connector
 		vals = {'Name': 'CONNECTOR',
 			'PID': self.connectorSection._id,
-			'G1':  self.centerCoordNode._id, 'G2': self.connectorNode._id}
+			'G1':  self.connectingBeamsCenterNode1._id, 'G2': self.connectingBeamsCenterNode2._id}
 		self.connector = base.CreateEntity(constants.ABAQUS, "CONNECTOR", vals)
 	
 	#-------------------------------------------------------------------------
@@ -378,9 +410,9 @@ class SmartClip(object):
 		
 		# create beams
 		print('Select nodes for beam definition: CONNECTOR - CLIP contra side.')
-		self.beamNodesCcs = base.PickEntities(constants.ABAQUS, "NODE", initial_entities = self.connectorNode)
+		self.beamNodesCcs = base.PickEntities(constants.ABAQUS, "NODE", initial_entities = self.connectingBeamsCenterNode2)
 		try:
-			self.beamNodesCcs.remove(self.connectorNode)
+			self.beamNodesCcs.remove(self.connectingBeamsCenterNode2)
 		except:
 			self.beamNodesCcs = None
 			raise(SmartClipException('No NODES selected for CONNECTOR - CLIP contra side!'))
@@ -418,7 +450,7 @@ class SmartClip(object):
 		for node in self.beamNodesCcs:
 			vals = {'Name': 'BEAM',
 				'PID': self.beamSectionCcs._id,
-				'NODE1': self.connectorNode._id,
+				'NODE1': self.connectingBeamsCenterNode2._id,
 				'NODE2': node._id,
 				'Orient': 'With Vector', 'C1' : 0, 'C2' : 1, 'C3' : -1,}
 			beam = base.CreateEntity(constants.ABAQUS, "BEAM", vals)
@@ -430,10 +462,10 @@ class SmartClip(object):
 		
 		# create beams
 		print('Select nodes for beam definition: CONNECTOR - CLIP.')
-		self.beamNodesCs = base.PickEntities(constants.ABAQUS, "NODE", initial_entities = self.centerCoordNode)
+		self.beamNodesCs = base.PickEntities(constants.ABAQUS, "NODE", initial_entities = self.connectingBeamsCenterNode1)
 		
 		try:
-			self.beamNodesCs.remove(self.centerCoordNode)
+			self.beamNodesCs.remove(self.connectingBeamsCenterNode1)
 		except:
 			self.beamNodesCs = None
 			raise(SmartClipException('No NODES selected for CONNECTOR - CLIP!'))
@@ -471,13 +503,187 @@ class SmartClip(object):
 		for node in self.beamNodesCs:
 			vals = {'Name': 'BEAM',
 				'PID': self.beamSectionCs._id,
-				'NODE1': self.centerCoordNode._id,
+				'NODE1': self.connectingBeamsCenterNode1._id,
 				'NODE2': node._id,
 				'Orient': 'With Vector', 'C1' : 0, 'C2' : 1, 'C3' : -1,}
 			beam = base.CreateEntity(constants.ABAQUS, "BEAM", vals)
 			self.beamsCs.append(beam)
 		
 
+# ==============================================================================
+
+class SkodaClipType(AudiClipType):
+	
+	TYPE_NAME = 'SKODA'
+	INFO = 'SKODA CONNECTOR type clip consists of 3 connectors joined together with steel beams of very low density and beams joining connector with a clip and its contra side.'
+	ICON = os.path.join(PATH_RES, 'icons', 'clip_beam_skoda.png')
+	
+	CONNECTOR_ELASTICITY = [1, 1, 1, 10, 10, 10]
+	CONNECTOR_DISTANCE = 5.0
+	CONNECTING_BEAM_SECTION_ID = 5001
+	
+	def createNodesForConnector(self):
+				
+		# create nodes for entities
+		zVector = self.middlePointCoords - self.centerCoordPointCoords
+		zVectorNorm = zVector/ np.linalg.norm(zVector)
+		
+		xVectorNorm = self.sideProjectionVectorPlus/ np.linalg.norm(self.sideProjectionVectorPlus)
+				
+		xMove = self.CONNECTOR_DISTANCE*xVectorNorm
+		yMove = -1*self.CONNECTOR_DISTANCE*np.array(self.smallFaceNormal)
+		zMove = self.CONNECTOR_LENGTH*zVectorNorm
+		
+		# connector C3
+		con3Node2Coords = self.centerCoordPointCoords + zMove
+		
+		self.centerCoordNode = createNode(self.centerCoordPointCoords)
+		self.con3Node1 =createNode(self.centerCoordPointCoords)
+		self.con3Node2 =createNode(con3Node2Coords)
+		
+		# connector C1
+		con1Node1Coords = self.centerCoordPointCoords - yMove - xMove
+		con1Node2Coords = self.centerCoordPointCoords - yMove - xMove + zMove
+		
+		self.con1Node1 =createNode(con1Node1Coords)
+		self.con1Node2 = createNode(con1Node2Coords)
+		
+		# connector C2
+		con2Node1Coords = self.centerCoordPointCoords - yMove + xMove
+		con2Node2Coords = self.centerCoordPointCoords - yMove + xMove + zMove
+		
+		self.con2Node1 =createNode(con2Node1Coords)
+		self.con2Node2 = createNode(con2Node2Coords)
+		
+		# center nodes
+		self.connectingBeamsCenterNode1 = createNode(np.median([con1Node1Coords, con2Node1Coords], axis=0))
+		self.connectingBeamsCenterNode2 = createNode(np.median([con1Node2Coords, con2Node2Coords], axis=0))
+					 
+	#-------------------------------------------------------------------------
+	
+	def createConnector(self):
+		
+		# create connector elasticity
+		vals = {'Name': 'CONNECTOR ELASTICITY',
+			 'COMP': 'YES',
+			 'COMP(1)': 'YES', 'El.Stiff.(1)': self.CONNECTOR_ELASTICITY[0],
+			 'COMP(2)': 'YES', 'El.Stiff.(2)': self.CONNECTOR_ELASTICITY[1],
+			 'COMP(3)': 'YES', 'El.Stiff.(3)': self.CONNECTOR_ELASTICITY[2],
+			 'COMP(4)': 'YES', 'El.Stiff.(4)': self.CONNECTOR_ELASTICITY[3],
+			 'COMP(5)': 'YES', 'El.Stiff.(5)': self.CONNECTOR_ELASTICITY[4],
+			 'COMP(6)': 'YES', 'El.Stiff.(6)': self.CONNECTOR_ELASTICITY[5]
+			}
+		self.connectorElasticity = base.CreateEntity(constants.ABAQUS, "CONNECTOR_ELASTICITY", vals)
+	
+		# create connector stop
+		vals = {'Name': 'CONNECTOR STOP',
+			 'COMP (1)': 'YES', 'Low.Lim.(1)': self.xLow, 'Up.Lim.(1)': self.xUp, 
+			 'COMP (2)': 'YES', 'Low.Lim.(2)': self.yLow, 'Up.Lim.(2)': self.yUp, 
+			 'COMP (3)': 'YES', 'Low.Lim.(3)': self.zLow, 'Up.Lim.(3)': self.zUp, 
+			}
+		self.connectorStop = base.CreateEntity(constants.ABAQUS, "CONNECTOR_STOP", vals)
+		
+	
+		# create connector behavior
+		vals = {'Name': 'CONNECTOR BEHAVIOR',
+			'*ELASTICITY': 'YES', 'EL>data': self.connectorElasticity._id,
+			'*STOP':'YES', 'STP>data': self.connectorStop._id,
+			}
+		self.connectorBehavior = base.CreateEntity(constants.ABAQUS, "CONNECTOR BEHAVIOR", vals)
+		
+		# create a connector section
+		vals = {'Name': 'CONNECTOR_SECTION',
+			 'MID': self.connectorBehavior._id,
+			'COMPONENT_1': 'CARDAN', 'COMPONENT_2':  'CARTESIAN', 'ORIENT_1': self.coordSystem._id,
+			}
+		self.connectorSection = base.CreateEntity(constants.ABAQUS, "CONNECTOR_SECTION", vals)
+		
+		# create a connector C3
+		vals = {'Name': 'CONNECTOR_C3',
+			'PID': self.connectorSection._id,
+			'G1':  self.con3Node1._id, 'G2': self.con3Node2._id}
+		self.connectorC3 = base.CreateEntity(constants.ABAQUS, "CONNECTOR", vals)
+		
+		# create a connector C1
+		vals = {'Name': 'CONNECTOR_C1',
+			'PID': self.connectorSection._id,
+			'G1':  self.con1Node1._id, 'G2': self.con1Node2._id}
+		self.connectorC1 = base.CreateEntity(constants.ABAQUS, "CONNECTOR", vals)
+		
+		# create a connector C2
+		vals = {'Name': 'CONNECTOR_C2',
+			'PID': self.connectorSection._id,
+			'G1':  self.con2Node1._id, 'G2': self.con2Node2._id}
+		self.connectorC2 = base.CreateEntity(constants.ABAQUS, "CONNECTOR", vals)
+		
+		self.connectConnectorsWithBeams()
+	
+	#-------------------------------------------------------------------------
+	
+	def connectConnectorsWithBeams(self):
+		
+		def getBeamSection():
+			beamSection = base.GetEntity(constants.ABAQUS, 'BEAM_SECTION', self.CONNECTING_BEAM_SECTION_ID)
+
+			if beamSection is None:
+								
+				# create material for beam section
+				vals = {
+					'Name': 'CONNECTOR_BODY_STEEL_LIGHT',
+					'DEFINED' : 'YES',
+					'Elasticity' : 'ELASTIC',
+					'Plasticity (Rate Indep.)' : 'PLASTIC', 
+					'Plasticity (Rate Dep.)' : 'CREEP',
+					 '*DENSITY' : 'YES',
+					 'DENS' : 7.85E-12, 
+					 '*EXPANSION' : 'YES', 'TYPE' : 'ISO',
+					 'a' : 1.2E-5,
+					 '*ELASTIC' : 'YES',
+					 # 'TYPE' : 'ISOTROPIC',
+					 'YOUNG' : 210000, 'POISSON' : 0.3
+					 }
+									
+				beamMaterial = base.CreateEntity(constants.ABAQUS, "MATERIAL", vals)
+						
+				# create a new beam section for connecting beams
+				vals = {'Name': 'CONNECTOR_BODY_BEAM_SECTION',
+					'PID': self.CONNECTING_BEAM_SECTION_ID,
+					'TYPE_':'SECTION', 'MID': beamMaterial._id,
+					'SECTION': 'CIRC', 'TYPE':'B31', 'optional2':'H',
+					'RADIUS' : 5, 'C1' : 0, 'C2' : 1, 'C3' : -1}
+				beamSection = base.CreateEntity(constants.ABAQUS, "BEAM_SECTION", vals)
+				
+			return beamSection
+						
+		self.connectingBeamsSection = getBeamSection()
+		
+		# create connecting beams
+		self.connectingBeams = list()
+		for node in [self.con1Node1, self.con2Node1, self.con3Node1]:
+			vals = {'Name': 'BEAM',
+				'PID': self.connectingBeamsSection._id,
+				'NODE1': self.connectingBeamsCenterNode1._id,
+				'NODE2': node._id,
+				'Orient': 'With Vector', 'C1' : 0, 'C2' : 1, 'C3' : -1,}
+			beam = base.CreateEntity(constants.ABAQUS, "BEAM", vals)
+			self.connectingBeams.append(beam)
+		for node in [self.con1Node2, self.con2Node2, self.con3Node2]:
+			vals = {'Name': 'BEAM',
+				'PID': self.connectingBeamsSection._id,
+				'NODE1': self.connectingBeamsCenterNode2._id,
+				'NODE2': node._id,
+				'Orient': 'With Vector', 'C1' : 0, 'C2' : 1, 'C3' : -1,}
+			beam = base.CreateEntity(constants.ABAQUS, "BEAM", vals)
+			self.connectingBeams.append(beam)
+
+# ==============================================================================
+
+def createNode(nodeCoords):
+		
+	newNodeEntity = base.CreateEntity(constants.ABAQUS, "NODE",  {'X': nodeCoords[0], 'Y': nodeCoords[1], 'Z': nodeCoords[2]})
+	
+	return newNodeEntity
+		
 # ==============================================================================
 
 def showMessage(message):
@@ -600,10 +806,24 @@ def getEntityProperty(entity, propertyName):
 		cardField = base.GetEntityCardValues(constants.ABAQUS, entity, [propertyName])
 		return cardField[propertyName]
 
+#==============================================================================
+
+def getClipType(clipType='AUDI'):
+	
+	try:
+		clipTypeClass = clipTypeRegistry[clipType]
+		
+		return clipTypeClass()
+	except KeyError as e:
+		showMessage('No such a clip type "%s" defined.' % clipType)
+	except Exception as e:
+		showMessage(str(e))
+	return None
+
 # ==============================================================================
 
 #@ansa.session.defbutton('Mesh', 'SmartClip')
-def runSmartClip():
+def runSmartClip(clipType='AUDI'):
 	
 	'''"SmartClip" tool is an utility to make the clip definition as easy as possible.
 	
@@ -623,13 +843,12 @@ NOTE:
 	Keep FEM model visible (visib switch on) in the time of guiding CON selection for the best result.
 '''
 	
-	sc = SmartClip()
+	sc = getClipType(clipType)
 	sc.run()
 	
 # ==============================================================================
 
 #if __name__ == '__main__':
-#	
-#	runSmartClip()
+#	runSmartClip('SKODA')
 
 

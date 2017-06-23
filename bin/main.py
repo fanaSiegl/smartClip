@@ -16,6 +16,8 @@ try:
 	import comp_widgets
 	import util
 	
+	print('Runnig devel version ', __file__)
+	
 except ImportError as e:
 	# installed default version
 	PATH_BIN = '/data/fem/users/siegl/tools/python/ansaTools/smartClip/default/bin'
@@ -25,9 +27,11 @@ except ImportError as e:
 	ansa.ImportCode(os.path.join(PATH_BIN, 'comp_widgets.py'))
 
 #import imp
-
 #imp.reload(comp_items)
 #imp.reload(comp_widgets)
+#ansa.ImportCode(os.path.join(PATH_BIN, 'comp_items.py'))
+#ansa.ImportCode(os.path.join(PATH_BIN, 'comp_widgets.py'))
+#ansa.ImportCode(os.path.join(PATH_BIN, 'util.py'))
 
 from comp_items import SmartClipException
 
@@ -45,7 +49,7 @@ class SmartClipDialog(object):
 	def __init__(self):
 		
 		self.initialEntities = base.CollectEntities(constants.ABAQUS, None, ['SHELL', 'FACE', 'BEAM', 'CONNECTOR', 'ORIENTATION_R'], filter_visible=True )
-		self.smartClip = comp_items.SmartClip()
+		self.smartClip = comp_items.getClipType()
 		self.pageContainer = comp_widgets.PageContainer()
 
 		#self.mainWindow = guitk.BCWizardCreate("SmartClip", guitk.constants.BCOnExitHide)
@@ -53,10 +57,10 @@ class SmartClipDialog(object):
 		guitk.BCWindowSetInitSize(self.mainWindow, self.WIDTH, self.HEIGTH)
 		guitk.BCWindowSetSaveSettings(self.mainWindow, False)
 		
-		page0 = comp_widgets.SelectClipTypePage(self, 'Select CLIP Type', 'Select a type of the CLIP')
-		page1 = comp_widgets.SelectConPage(self, 'Select CON', 'Select the guiding clip edge - CON')
-		page2 = comp_widgets.SelectClipNodesPage(self, 'Select NODES', 'Select NODES for CONNECTOR on the clip')
-		page3 = comp_widgets.SelectClipContraNodesPage(self, 'Select NODES', 'Select NODES for CONNECTOR on the clip contra side')
+		self.page0 = comp_widgets.SelectClipTypePage(self, 'Select CLIP Type', 'Select a type of the CLIP')
+		self.page1 = comp_widgets.SelectConPage(self, 'Select CON', 'Select the guiding clip edge - CON')
+		self.page2 = comp_widgets.SelectClipNodesPage(self, 'Select NODES', 'Select NODES for CONNECTOR on the clip')
+		self.page3 = comp_widgets.SelectClipContraNodesPage(self, 'Select NODES', 'Select NODES for CONNECTOR on the clip contra side')
 		
 		#self.statusBar = guitk.BCStatusBarCreate(self.mainWindow)
 		
@@ -71,6 +75,12 @@ class SmartClipDialog(object):
 		guitk.BCWindowSetSaveSettings(self.mainWindow, True)
 		guitk.BCShow(self.mainWindow)
 	
+	#-------------------------------------------------------------------------
+
+	def getSmartClip(self):
+		
+		return self.smartClip
+		
 	#-------------------------------------------------------------------------
 
 	def controller(self, wizard, oldIndex, stepId, data):
@@ -160,7 +170,15 @@ class SmartClipDialog(object):
 			print("Right mouse button pressed")
 		
 		return 1
-				
+	
+	#-------------------------------------------------------------------------
+	
+	def setTypeBeam(self, index, beamType):
+			
+		self.setDftTypeBeam(index)
+		
+		self.smartClip = comp_items.getClipType(beamType)
+		
 	#-------------------------------------------------------------------------
 	@classmethod
 	def setDftTypeBeam(cls, value):
