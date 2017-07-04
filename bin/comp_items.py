@@ -26,18 +26,130 @@ class SmartClipException(Exception): pass
 
 # ==============================================================================
 
-clipTypeRegistry = {}
+clipBeamTypeRegistry = {}
    
-class MetaClass(type):
+class BeamTypeMetaClass(type):
     def __new__(cls, clsname, bases, attrs):
-        newclass = super(MetaClass, cls).__new__(cls, clsname, bases, attrs)
+        newclass = super(BeamTypeMetaClass, cls).__new__(cls, clsname, bases, attrs)
         
-        clipTypeRegistry[newclass.TYPE_NAME] = newclass
+        clipBeamTypeRegistry[newclass.TYPE_NAME] = newclass
         return newclass
+
+# ==============================================================================
+
+clipGeomTypeRegistry = {}
+   
+class GeomTypeMetaClass(type):
+    def __new__(cls, clsname, bases, attrs):
+        newclass = super(GeomTypeMetaClass, cls).__new__(cls, clsname, bases, attrs)
+        
+        clipGeomTypeRegistry[newclass.TYPE_NAME] = newclass
+        return newclass
+        
+# ==============================================================================
+
+class SmartClip(object):
+	
+	coordsDrawState = None
+	
+	def __init__(self, geomType='Standart', beamType='AUDI'):
+		
+		self._geomType = None
+		self._beamType = None
+		
+		self.clipEntities= list()
+				
+		self._storeF11drawingSettings()
+		self._setupF11drawingSettings()
+		
+		# set default clip types
+		self.setGeomType(geomType)
+		self.setBeamType(beamType)
+	
+	#-------------------------------------------------------------------------
+	
+	def beamType(self):
+		return self._beamType
+	
+	#-------------------------------------------------------------------------
+	
+	def geomType(self):
+		return self._geomType
+	
+	#-------------------------------------------------------------------------
+	
+	def setBeamType(self, beamType):
+			
+		try:
+			clipBeamTypeClass = clipBeamTypeRegistry[beamType]
+			
+			self._beamType = clipBeamTypeClass(self)
+			return
+		except KeyError as e:
+			showMessage('No such a beam type "%s" defined.' % beamType)
+		except Exception as e:
+			showMessage(str(e))
+		self._beamType = None
+	
+	#-------------------------------------------------------------------------
+	
+	def setGeomType(self, geomType):
+		
+		try:
+			clipGeomTypeClass = clipGeomTypeRegistry[geomType]
+			
+			self._geomType = clipGeomTypeClass(self)
+			return
+		except KeyError as e:
+			showMessage('No such a geom type "%s" defined.' % geomType)
+		except Exception as e:
+			showMessage(str(e))
+		self._geomType  = None
+		
+	#-------------------------------------------------------------------------
+    
+	def run(self):
+		
+		try:
+			self.geomType().setBaseFaces()
+			self.geomType().setStopDistances()
+			self.geomType().createCoorSystem()
+			
+			self.beamType().createNodesForConnector()
+			self.beamType().createConnector()
+			self.beamType().createBeams()
+			
+		except SmartClipException as e:
+			print(str(e))
+		    
+	#-------------------------------------------------------------------------
+	
+	@classmethod
+	def _storeF11drawingSettings(cls):
+		
+		#{'value': 50.0, 'status': 'Relative to screen (%)'}
+		currentValue = int(ansa.base.F11PresParamsOptionsGet("Coords")['value'])
+		if cls.coordsDrawState is None:
+			cls.coordsDrawState = currentValue
+	
+	#-------------------------------------------------------------------------
+	
+	def _setupF11drawingSettings(self):
+		
+		ansa.base.F11PresParamsOptionsSet("Coords", 'Relative to screen (%)', 50.0)
+	
+	#-------------------------------------------------------------------------
+	
+	@classmethod
+	def _restoreF11drawingSettings(cls):
+		
+		ansa.base.F11PresParamsOptionsSet("Coords", 'Relative to screen (%)', cls.coordsDrawState)
+		cls.coordsDrawState = None
+	
         	
 # ==============================================================================
 
-class AudiClipType(metaclass=MetaClass):
+class AudiBeamType(metaclass=BeamTypeMetaClass):
 	
 	TYPE_NAME = 'AUDI'
 	INFO ='AUDI CONNECTOR type clip consists of 1 connector element and beams joining connector with a clip and its contra side.'
@@ -46,13 +158,21 @@ class AudiClipType(metaclass=MetaClass):
 	CONNECTOR_ELASTICITY = [50, 50, 50]
 	CONNECTOR_LENGTH = 1.0
 	
-	def __init__(self):
+	coordsDrawState = None
+	
+	def __init__(self, parentClip=None):
+		
+		self.parentClip = parentClip
 		
 		self.selectedCon = None
 		self.beamNodesCs = None
 		self.beamNodesCcs = None
+		self.clipEntities= list()
 		
 		self.stopDistanceMeasurements = list()
+		
+		self._storeF11drawingSettings()
+		self._setupF11drawingSettings()
 	
 	#-------------------------------------------------------------------------
     
@@ -68,6 +188,7 @@ class AudiClipType(metaclass=MetaClass):
 			
 			self.createConnector()
 			self.createBeams()
+			
 		except SmartClipException as e:
 			print(str(e))
 		    
@@ -140,17 +261,35 @@ class AudiClipType(metaclass=MetaClass):
 		self.stopDistanceMeasurements.append(mFace2face)
 		
 		return faceDist*direction
+		
+	#-------------------------------------------------------------------------
+	
+	@classmethod
+	def _storeF11drawingSettings(cls):
+		
+		#{'value': 50.0, 'status': 'Relative to screen (%)'}
+		currentValue = int(ansa.base.F11PresParamsOptionsGet("Coords")['value'])
+		if cls.coordsDrawState is None:
+			cls.coordsDrawState = currentValue
 	
 	#-------------------------------------------------------------------------
-    
-	def hideAllFaces(self):
-		ent = base.CollectEntities(constants.ABAQUS, None, "FACE", filter_visible=True )
-		status = base.Not(ent, constants.ABAQUS)
+	
+	def _setupF11drawingSettings(self):
+		
+		ansa.base.F11PresParamsOptionsSet("Coords", 'Relative to screen (%)', 50.0)
+	
+	#-------------------------------------------------------------------------
+	
+	@classmethod
+	def _restoreF11drawingSettings(cls):
+		
+		ansa.base.F11PresParamsOptionsSet("Coords", 'Relative to screen (%)', cls.coordsDrawState)
+		cls.coordsDrawState = None
 		
 	#-------------------------------------------------------------------------
     
 	def setBaseFaces(self):
-		
+						
 		# selecting base CON defining the clip position
 		print('Select guiding clip edge - CON.')
 		selectedCons = base.PickEntities(constants.ABAQUS, "CONS")
@@ -193,7 +332,7 @@ class AudiClipType(metaclass=MetaClass):
 		
 		# create points for coordinate system
 		self.middlePointCoords = getConMiddle(self.selectedCon)
-		self.topEdgeMiddleCoords = getConMiddle(oppositeCon)
+		#self.topEdgeMiddleCoords = getConMiddle(oppositeCon)
 		
 		# guiding face normals
 		self.smallFaceNormal = base.GetFaceOrientation(self.smallFace)
@@ -217,6 +356,7 @@ class AudiClipType(metaclass=MetaClass):
 		
 		# find coordinates for coordinate system
 		self.centerCoordPointCoords = np.median([self.oppositeFacePointCoords, self.middlePointCoords], axis=0)
+		self.centerCoordNode = createNode(self.centerCoordPointCoords)
 		#base.Newpoint(*self.centerCoordPointCoords)
 		
 		# find side faces		
@@ -235,6 +375,9 @@ class AudiClipType(metaclass=MetaClass):
 		# move a point lower
 		self.sideMinusPointCoords = sideMinusPointCoords + 1*np.array(self.smallFaceNormal)
 		self.sideFaceMinusPoint = base.Newpoint(*self.sideMinusPointCoords)
+		
+		# this is correct orthogonal vector that a small face should have in case of 90 degrees...
+		self.smallFaceOrthoVector = np.cross(self.largeFaceNormal, self.sideProjectionVectorMinus)
 	
 	#-------------------------------------------------------------------------
     
@@ -245,8 +388,7 @@ class AudiClipType(metaclass=MetaClass):
 		connectorNodeNorm = connectorNodeVector/ np.linalg.norm(connectorNodeVector)
 		connectorNodeCoords = self.centerCoordPointCoords+self.CONNECTOR_LENGTH*connectorNodeNorm
 	
-		#self.connectorNode = createNode(connectorNodeCoords)
-		self.centerCoordNode = createNode(self.centerCoordPointCoords)
+		#self.centerCoordNode = createNode(self.centerCoordPointCoords)
 	
 		self.connectingBeamsCenterNode1 = createNode(self.centerCoordPointCoords)
 		self.connectingBeamsCenterNode2 = createNode(connectorNodeCoords)
@@ -394,28 +536,42 @@ class AudiClipType(metaclass=MetaClass):
 			'PID': self.connectorSection._id,
 			'G1':  self.connectingBeamsCenterNode1._id, 'G2': self.connectingBeamsCenterNode2._id}
 		self.connector = base.CreateEntity(constants.ABAQUS, "CONNECTOR", vals)
+		
+		self.clipEntities.append(self.connector)
 	
 	#-------------------------------------------------------------------------
     
 	def createBeams(self):
 		
-		self.hideAllFaces()
+		hideAllFaces()
 		
 		self.createBeamsConnectorClipSide()
 		self.createBeamsConnectorClipContraSide()
+		
+		self._restoreF11drawingSettings()
 	
 	#-------------------------------------------------------------------------
     
 	def createBeamsConnectorClipContraSide(self):
 		
-		# create beams
+		# find nodes for initial selection
+		searchEntities = base.CollectEntities(constants.ABAQUS, None, "SHELL")
+		nearestElements = findNearestElements(
+			self.frontNeighbourFacePointCoords + 0.2*np.array(self.largeFaceNormal), searchEntities)
+		
 		print('Select nodes for beam definition: CONNECTOR - CLIP contra side.')
-		self.beamNodesCcs = base.PickEntities(constants.ABAQUS, "NODE", initial_entities = self.connectingBeamsCenterNode2)
-		try:
-			self.beamNodesCcs.remove(self.connectingBeamsCenterNode2)
-		except:
-			self.beamNodesCcs = None
-			raise(SmartClipException('No NODES selected for CONNECTOR - CLIP contra side!'))
+		selectedElements = base.PickEntities(constants.ABAQUS, "SHELL", initial_entities=nearestElements)
+		
+		self.beamNodesCcs = base.CollectEntities(constants.ABAQUS, selectedElements, "NODE")
+		
+		# create beams
+#		print('Select nodes for beam definition: CONNECTOR - CLIP contra side.')
+#		self.beamNodesCcs = base.PickEntities(constants.ABAQUS, "NODE", initial_entities = self.connectingBeamsCenterNode2)
+#		try:
+#			self.beamNodesCcs.remove(self.connectingBeamsCenterNode2)
+#		except:
+#			self.beamNodesCcs = None
+#			raise(SmartClipException('No NODES selected for CONNECTOR - CLIP contra side!'))
 		
 		if len(self.beamNodesCcs) == 0:
 			self.beamNodesCcs = None
@@ -455,20 +611,33 @@ class AudiClipType(metaclass=MetaClass):
 				'Orient': 'With Vector', 'C1' : 0, 'C2' : 1, 'C3' : -1,}
 			beam = base.CreateEntity(constants.ABAQUS, "BEAM", vals)
 			self.beamsCcs.append(beam)
+		
+		self.clipEntities.extend(self.beamsCcs)
 			
 	#-------------------------------------------------------------------------
     
 	def createBeamsConnectorClipSide(self):
 		
-		# create beams
+		# find nodes for initial selection
+		searchEntities = base.CollectEntities(constants.ABAQUS, None, "SHELL")
+		nearestElements = list()
+		for coords in [self.sidePlusPointCoords, self.centerCoordPointCoords, self.sideMinusPointCoords]:
+			nearestElements.extend(findNearestElements(coords, searchEntities))
+
 		print('Select nodes for beam definition: CONNECTOR - CLIP.')
-		self.beamNodesCs = base.PickEntities(constants.ABAQUS, "NODE", initial_entities = self.connectingBeamsCenterNode1)
+		selectedElements = base.PickEntities(constants.ABAQUS, "SHELL", initial_entities=nearestElements)
 		
-		try:
-			self.beamNodesCs.remove(self.connectingBeamsCenterNode1)
-		except:
-			self.beamNodesCs = None
-			raise(SmartClipException('No NODES selected for CONNECTOR - CLIP!'))
+		self.beamNodesCs = base.CollectEntities(constants.ABAQUS, selectedElements, "NODE")
+		
+		# create beams
+#		print('Select nodes for beam definition: CONNECTOR - CLIP.')
+#		self.beamNodesCs = base.PickEntities(constants.ABAQUS, "NODE", initial_entities = initialNodes)
+		
+#		try:
+#			self.beamNodesCs.remove(self.connectingBeamsCenterNode1)
+#		except:
+#			self.beamNodesCs = None
+#			raise(SmartClipException('No NODES selected for CONNECTOR - CLIP!'))
 
 		if len(self.beamNodesCs) == 0:
 			self.beamNodesCs = None
@@ -509,10 +678,12 @@ class AudiClipType(metaclass=MetaClass):
 			beam = base.CreateEntity(constants.ABAQUS, "BEAM", vals)
 			self.beamsCs.append(beam)
 		
+		self.clipEntities.extend(self.beamsCs)
+		
 
 # ==============================================================================
 
-class SkodaClipType(AudiClipType):
+class SkodaBeamType(AudiBeamType):
 	
 	TYPE_NAME = 'SKODA'
 	INFO = 'SKODA CONNECTOR type clip consists of 3 connectors joined together with steel beams of very low density and beams joining connector with a clip and its contra side.'
@@ -521,6 +692,8 @@ class SkodaClipType(AudiClipType):
 	CONNECTOR_ELASTICITY = [1, 1, 1, 10, 10, 10]
 	CONNECTOR_DISTANCE = 5.0
 	CONNECTING_BEAM_SECTION_ID = 5001
+	
+	#-------------------------------------------------------------------------
 	
 	def createNodesForConnector(self):
 				
@@ -531,29 +704,31 @@ class SkodaClipType(AudiClipType):
 		xVectorNorm = self.sideProjectionVectorPlus/ np.linalg.norm(self.sideProjectionVectorPlus)
 				
 		xMove = self.CONNECTOR_DISTANCE*xVectorNorm
-		yMove = -1*self.CONNECTOR_DISTANCE*np.array(self.smallFaceNormal)
+		yMove = -1*self.CONNECTOR_DISTANCE*np.array(self.smallFaceOrthoVector)#smallFaceNormal)
 		zMove = self.CONNECTOR_LENGTH*zVectorNorm
-		
-		# connector C3
-		con3Node2Coords = self.centerCoordPointCoords + zMove
-		
-		self.centerCoordNode = createNode(self.centerCoordPointCoords)
-		self.con3Node1 =createNode(self.centerCoordPointCoords)
-		self.con3Node2 =createNode(con3Node2Coords)
-		
+				
 		# connector C1
-		con1Node1Coords = self.centerCoordPointCoords - yMove - xMove
-		con1Node2Coords = self.centerCoordPointCoords - yMove - xMove + zMove
+		con1Node1Coords = self.centerCoordPointCoords - xMove - 0.5*zMove
+		con1Node2Coords = self.centerCoordPointCoords - xMove + 0.5*zMove
 		
 		self.con1Node1 =createNode(con1Node1Coords)
 		self.con1Node2 = createNode(con1Node2Coords)
 		
 		# connector C2
-		con2Node1Coords = self.centerCoordPointCoords - yMove + xMove
-		con2Node2Coords = self.centerCoordPointCoords - yMove + xMove + zMove
+		con2Node1Coords = self.centerCoordPointCoords + xMove - 0.5*zMove
+		con2Node2Coords = self.centerCoordPointCoords + xMove + 0.5*zMove
 		
 		self.con2Node1 =createNode(con2Node1Coords)
 		self.con2Node2 = createNode(con2Node2Coords)
+		
+		# connector C3
+		con3Node1Coords = self.centerCoordPointCoords + yMove - 0.5*zMove
+		con3Node2Coords = self.centerCoordPointCoords + yMove + 0.5*zMove
+		
+		self.centerCoordNode = createNode(self.centerCoordPointCoords)
+		
+		self.con3Node1 =createNode(con3Node1Coords)
+		self.con3Node2 =createNode(con3Node2Coords)
 		
 		# center nodes
 		self.connectingBeamsCenterNode1 = createNode(np.median([con1Node1Coords, con2Node1Coords], axis=0))
@@ -616,6 +791,8 @@ class SkodaClipType(AudiClipType):
 			'G1':  self.con2Node1._id, 'G2': self.con2Node2._id}
 		self.connectorC2 = base.CreateEntity(constants.ABAQUS, "CONNECTOR", vals)
 		
+		self.clipEntities.extend([self.connectorC1, self.connectorC2, self.connectorC3])
+		
 		self.connectConnectorsWithBeams()
 	
 	#-------------------------------------------------------------------------
@@ -675,7 +852,95 @@ class SkodaClipType(AudiClipType):
 				'Orient': 'With Vector', 'C1' : 0, 'C2' : 1, 'C3' : -1,}
 			beam = base.CreateEntity(constants.ABAQUS, "BEAM", vals)
 			self.connectingBeams.append(beam)
+		
+		self.clipEntities.extend(self.connectingBeams)
 
+# ==============================================================================
+
+class SymmetricalClip(object):
+	
+	PASTE_TOLERANCE = 0.2
+	
+	def __init__(self, parentClip):
+		
+		self.parentClip = parentClip
+		
+		self.createSymmetricalCoorSys()
+		self.mirrorClip()
+		self.updateConnectorOrienation()
+		self.showNearElements()
+	
+	#-------------------------------------------------------------------------
+	
+	def createSymmetricalCoorSys(self):
+		
+		thirdPointCoords = np.array([1,-1,1])*np.array(self.parentClip.middlePointCoords)+np.array([1,-1,1])*np.array(self.parentClip.sideProjectionVectorMinus)
+		
+		vals = {'Name': 'CLIP_COOR_SYS',
+			'A1':  self.parentClip.centerCoordPointCoords[0], 'A2':  -1*self.parentClip.centerCoordPointCoords[1], 'A3':  self.parentClip.centerCoordPointCoords[2],
+			'B1':  self.parentClip.middlePointCoords[0], 'B2':  -1*self.parentClip.middlePointCoords[1], 'B3':  self.parentClip.middlePointCoords[2],
+			'C1':  thirdPointCoords[0], 'C2':  thirdPointCoords[1], 'C3':  thirdPointCoords[2]}
+				
+		self.symmCoordSystem = base.CreateEntity(constants.ABAQUS, "ORIENTATION_R", vals)
+	
+	#-------------------------------------------------------------------------
+	
+	def mirrorClip(self):
+		
+		entities = self.parentClip.clipEntities
+		
+		collector = base.CollectNewModelEntities(constants.ABAQUS, "CONNECTOR")
+		base.GeoSymmetry("COPY", "AUTO_OFFSET", "SAME PART", "NONE", entities, keep_connectivity=True)
+		self.newConnectors = collector.report()
+	
+	#-------------------------------------------------------------------------
+	
+	def updateConnectorOrienation(self):
+		
+		# find the PID of the new mirrored connectors
+		newConnectorSectionID = getEntityProperty(list(self.newConnectors)[0], 'PID')
+		newConnectorSection = base.GetEntity(constants.ABAQUS, "CONNECTOR_SECTION", newConnectorSectionID)		
+		
+		# create the new connector stop
+		vals = {'Name': 'CONNECTOR STOP',
+			 'COMP (1)': 'YES', 'Low.Lim.(1)': -1*self.parentClip.xUp, 'Up.Lim.(1)': -1*self.parentClip.xLow, 
+			 'COMP (2)': 'YES', 'Low.Lim.(2)': self.parentClip.yLow, 'Up.Lim.(2)': self.parentClip.yUp, 
+			 'COMP (3)': 'YES', 'Low.Lim.(3)': self.parentClip.zLow, 'Up.Lim.(3)': self.parentClip.zUp, 
+			}
+		newConnectorStop = base.CreateEntity(constants.ABAQUS, "CONNECTOR_STOP", vals)
+		
+		# create the new connector behavior
+		vals = {'Name': 'CONNECTOR BEHAVIOR',
+			'*ELASTICITY': 'YES', 'EL>data': self.parentClip.connectorElasticity._id,
+			'*STOP':'YES', 'STP>data': newConnectorStop._id,
+			}
+		newConnectorBehavior = base.CreateEntity(constants.ABAQUS, "CONNECTOR BEHAVIOR", vals)
+		
+		# update coor sys and connector behaviour
+		vals = {
+			'ORIENT_1': self.symmCoordSystem._id,
+			'MID' : newConnectorBehavior._id}
+		base.SetEntityCardValues(constants.ABAQUS, newConnectorSection, vals)
+	
+	#-------------------------------------------------------------------------
+	
+	def showNearElements(self):
+		
+		base.Near(radius=10., dense_search=True, custom_entities=self.newConnectors)
+		# hide geometry
+		ent = base.CollectEntities(constants.ABAQUS, None, "FACE", filter_visible=True )
+		status = base.Not(ent, constants.ABAQUS)
+		
+		#entities = self.parentClip.clipEntities
+		#entities.extend(self.newConnectors)
+		#base.BestView(self.symmCoordSystem)
+		
+		base.SetViewAngles(f_key="F5")
+		
+		# autopaste
+		ansa.mesh.AutoPaste(visible = True, project_on_geometry=False, project_2nd_order_nodes=False, move_to="FE pos", distance=self.PASTE_TOLERANCE, preserve_id = 'min')
+		
+		
 # ==============================================================================
 
 def createNode(nodeCoords):
@@ -749,6 +1014,7 @@ def getFaceNeighbourFaces(faceEntity, exclude=list()):
 	return neighbourFaces
 
 # ==============================================================================
+
 def getConMiddle(con):
 	
 	coords = getConsHotPointCoords(con)
@@ -808,14 +1074,42 @@ def getEntityProperty(entity, propertyName):
 
 #==============================================================================
 
-def getClipType(clipType='AUDI'):
+def findNearestElements(coords, searchEntities=None, maxIter=50):
+	
+	if searchEntities is None:
+		searchEntities = base.CollectEntities(constants.ABAQUS, None, "SHELL")
+		
+	tolerance = 0.1
+	increment = 0.1
+	i = 0
+	nearElements = None
+	while nearElements is None: #len(nearElements) == 0:#
+		nearElements = base.NearElements(search_entities=searchEntities, coordinates=coords, tolerance=tolerance)
+		tolerance += increment
+		
+		if i > maxIter:
+			return None
+			break
+		i += 1	
+			
+	return nearElements[0]
+
+#==============================================================================
+    
+def hideAllFaces():
+	ent = base.CollectEntities(constants.ABAQUS, None, "FACE", filter_visible=True )
+	status = base.Not(ent, constants.ABAQUS)
+		
+#==============================================================================
+
+def getClipType(beamType='AUDI'):
 	
 	try:
-		clipTypeClass = clipTypeRegistry[clipType]
+		clipTypeClass = clipBeamTypeRegistry[beamType]
 		
 		return clipTypeClass()
 	except KeyError as e:
-		showMessage('No such a clip type "%s" defined.' % clipType)
+		showMessage('No such a beam type "%s" defined.' % beamType)
 	except Exception as e:
 		showMessage(str(e))
 	return None
@@ -823,7 +1117,7 @@ def getClipType(clipType='AUDI'):
 # ==============================================================================
 
 #@ansa.session.defbutton('Mesh', 'SmartClip')
-def runSmartClip(clipType='AUDI'):
+def runSmartClip(beamType='AUDI'):
 	
 	'''"SmartClip" tool is an utility to make the clip definition as easy as possible.
 	
@@ -843,7 +1137,7 @@ NOTE:
 	Keep FEM model visible (visib switch on) in the time of guiding CON selection for the best result.
 '''
 	
-	sc = getClipType(clipType)
+	sc = getClipType(beamType)
 	sc.run()
 	
 # ==============================================================================

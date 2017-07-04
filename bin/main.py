@@ -29,8 +29,8 @@ except ImportError as e:
 #import imp
 #imp.reload(comp_items)
 #imp.reload(comp_widgets)
-#ansa.ImportCode(os.path.join(PATH_BIN, 'comp_items.py'))
-#ansa.ImportCode(os.path.join(PATH_BIN, 'comp_widgets.py'))
+ansa.ImportCode(os.path.join(PATH_BIN, 'comp_items.py'))
+ansa.ImportCode(os.path.join(PATH_BIN, 'comp_widgets.py'))
 #ansa.ImportCode(os.path.join(PATH_BIN, 'util.py'))
 
 from comp_items import SmartClipException
@@ -45,6 +45,7 @@ class SmartClipDialog(object):
 	
 	DFT_TYPE_BEAM = 0
 	DFT_TYPE_GEOM = 0
+	DFT_MIRROR_CLIP = True
 	
 	def __init__(self):
 		
@@ -90,13 +91,13 @@ class SmartClipDialog(object):
 			if self.smartClip.selectedCon is None:
 				try:
 					self.smartClip.setBaseFaces()
-					self.smartClip.createNodesForConnector()
+					#self.smartClip.createNodesForConnector()
 					self.smartClip.setStopDistances(hideMeasurements=False)
 					self.smartClip.createCoorSystem()
-					self.smartClip.createConnector()
+					#self.smartClip.createConnector()
 					
 					self.pageContainer.updateCurrentWidgetInfo()
-					
+										
 					#self.next()
 					if not guitk.BCWizardIsNextButtonEnabled(self.mainWindow):
 						guitk.BCWizardSetNextButtonEnabled(self.mainWindow, True)
@@ -116,9 +117,15 @@ class SmartClipDialog(object):
 			
 			if self.smartClip.beamNodesCs is None:
 				try:
+					self.smartClip.createNodesForConnector()
+					#self.smartClip.setStopDistances(hideMeasurements=False)
+					#self.smartClip.createCoorSystem()
+					self.smartClip.createConnector()
+					
+					
 					self.smartClip.hideMeasurements()
 					self.smartClip.hidePoints()
-					self.smartClip.hideAllFaces()
+					comp_items.hideAllFaces()
 					self.smartClip.createBeamsConnectorClipSide()
 					
 					self.pageContainer.updateCurrentWidgetInfo()
@@ -140,10 +147,14 @@ class SmartClipDialog(object):
 			
 			if self.smartClip.beamNodesCcs is None:
 				try:
-					self.smartClip.hideAllFaces()
+					comp_items.hideAllFaces()
 					self.smartClip.createBeamsConnectorClipContraSide()
 					
 					self.pageContainer.updateCurrentWidgetInfo()
+					
+					# create mirrored clip
+					if self.DFT_MIRROR_CLIP:
+						comp_items.SymmetricalClip(self.smartClip)
 					
 					#guitk.BCButtonSetText(self.pushButtonNext, 'Finish')
 					if not guitk.BCWizardIsNextButtonEnabled(self.mainWindow):
@@ -190,6 +201,11 @@ class SmartClipDialog(object):
 		cls.DFT_TYPE_GEOM = value
 	
 	#-------------------------------------------------------------------------
+	@classmethod
+	def setDftMirrorClipState(cls, state):
+		cls.DFT_MIRROR_CLIP = state
+	
+	#-------------------------------------------------------------------------
     
 	def _showStatusBarMessage(self, message):
 		
@@ -204,6 +220,8 @@ def _reject(window, application):
 	#answer = guitk.UserQuestion('Do you really want to quit SmartClip?')
 	
 	if answer == guitk.constants.BCRetKey or answer == 1:
+		
+		application.getSmartClip()._restoreF11drawingSettings()
 		guitk.BCDestroyLater(window)
 	#elif answer == guitk.constants.BCEscKey:
 	#	print("Reject")
@@ -248,6 +266,9 @@ def newClip(window, parent):
 
 @ansa.session.defbutton('Tools', 'SmartClip')
 def main():
+	
+	main.__doc__ = util.DESCRIPTION
+	
 	try:
 		dialog = SmartClipDialog()
 	except Exception as e:
@@ -257,6 +278,7 @@ def main():
 # ==============================================================================
 
 if __name__ == '__main__':
+	
 	main()
 
 		

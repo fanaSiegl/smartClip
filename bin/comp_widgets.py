@@ -268,7 +268,7 @@ class SelectClipTypePage(StackWidgetPage):
 		
 		# manufacturer selector
 		label = guitk.BCLabelCreate(self.contentLayout, 'Select CLIP beam type')
-		clipTypeOptions = list(comp_items.clipTypeRegistry.keys())
+		clipTypeOptions = list(comp_items.clipBeamTypeRegistry.keys())
 		self.clipBeamTypeComboBox = guitk.BCComboBoxCreate(self.contentLayout, clipTypeOptions)
 		
 		guitk.BCGridLayoutAddWidget(self.contentLayout, label, 2, 0, guitk.constants.BCAlignLeft)
@@ -276,14 +276,20 @@ class SelectClipTypePage(StackWidgetPage):
 		
 		# entity info
 		self._addContentLine( 'Beam type Info:', 'beamTypeInfo')
+
+		# add check box for mirror option
+		self.mirrorCheckBox = guitk.BCCheckBoxCreate(self.contentLayout, 'Mirror created clip')
+		guitk.BCGridLayoutAddWidget(self.contentLayout, self.mirrorCheckBox, 4, 0, guitk.constants.BCAlignLeft)
 		
 		# setup connections
 		guitk.BCComboBoxSetCurrentIndexChangedFunction(self.clipBeamTypeComboBox, self.beamTypeChanged, None)
 		guitk.BCComboBoxSetCurrentIndexChangedFunction(self.clipGeomTypeComboBox, self.geomTypeChanged, None)
+		guitk.BCCheckBoxSetToggledFunction(self.mirrorCheckBox, self.mirrorCheckBoxChanged, None)
 				
 		# set initial values
 		guitk.BCComboBoxSetCurrentItem(self.clipBeamTypeComboBox, self.parent.DFT_TYPE_BEAM)
 		guitk.BCComboBoxSetCurrentItem(self.clipGeomTypeComboBox, self.parent.DFT_TYPE_GEOM)
+		guitk.BCCheckBoxSetChecked(self.mirrorCheckBox, self.parent.DFT_MIRROR_CLIP)
 
 
 		guitk.BCLabelSetIconFileName(self.beamTypeInfo_label, self.smartClip().ICON)
@@ -291,15 +297,13 @@ class SelectClipTypePage(StackWidgetPage):
 
 #TODO: this will be replaced with other geometrical types loaded from comp_items		
 		self.geomTypeChanged(self.clipGeomTypeComboBox, self.parent.DFT_TYPE_GEOM, None)
-		#self.beamTypeChanged(self.clipBeamTypeComboBox, self.parent.DFT_TYPE_BEAM, None)
+		self.beamTypeChanged(self.clipBeamTypeComboBox, self.parent.DFT_TYPE_BEAM, None)
 	
 	#-------------------------------------------------------------------------
 
 	def geomTypeChanged(self, comboBox, index, data):
 		
 		self._setInfoAttributeValue('geomTypeInfo', 'This is an info about clip topology of the type: %s.' % index)
-		
-		
 		
 		if index == 0:
 			guitk.BCLabelSetIconFileName(self.geomTypeInfo_label, os.path.join(PATH_RES, 'icons', 'clip_geom_standart.png'))
@@ -318,8 +322,12 @@ class SelectClipTypePage(StackWidgetPage):
 		self._setInfoAttributeValue('beamTypeInfo', self.smartClip().INFO)
 				
 		guitk.BCLabelSetIconFileName(self.beamTypeInfo_label, self.smartClip().ICON)
+	
+	#-------------------------------------------------------------------------
 
-		
+	def mirrorCheckBoxChanged(self, checkBox, state, data):
+
+		self.parent.setDftMirrorClipState(state)
 		
 # ==============================================================================
 
