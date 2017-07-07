@@ -50,7 +50,7 @@ class SmartClipDialog(object):
 	def __init__(self):
 		
 		self.initialEntities = base.CollectEntities(constants.ABAQUS, None, ['SHELL', 'FACE', 'BEAM', 'CONNECTOR', 'ORIENTATION_R'], filter_visible=True )
-		self.smartClip = comp_items.getClipType()
+		self.smartClip = comp_items.SmartClip()
 		self.pageContainer = comp_widgets.PageContainer()
 
 		#self.mainWindow = guitk.BCWizardCreate("SmartClip", guitk.constants.BCOnExitHide)
@@ -88,12 +88,12 @@ class SmartClipDialog(object):
 		
 		if stepId == 1:
 			
-			if self.smartClip.selectedCon is None:
+			if self.smartClip.geomType().selectedCon is None:
 				try:
-					self.smartClip.setBaseFaces()
+					self.smartClip.geomType().setBaseFaces()
 					#self.smartClip.createNodesForConnector()
-					self.smartClip.setStopDistances(hideMeasurements=False)
-					self.smartClip.createCoorSystem()
+					self.smartClip.geomType().setStopDistances(hideMeasurements=False)
+					self.smartClip.geomType().createCoorSystem()
 					#self.smartClip.createConnector()
 					
 					self.pageContainer.updateCurrentWidgetInfo()
@@ -115,18 +115,15 @@ class SmartClipDialog(object):
 				
 		elif stepId == 2:
 			
-			if self.smartClip.beamNodesCs is None:
+			if self.smartClip.beamType().beamNodesCs is None:
 				try:
-					self.smartClip.createNodesForConnector()
-					#self.smartClip.setStopDistances(hideMeasurements=False)
-					#self.smartClip.createCoorSystem()
-					self.smartClip.createConnector()
+					self.smartClip.beamType().createNodesForConnector()
+					self.smartClip.beamType().createConnector()
 					
-					
-					self.smartClip.hideMeasurements()
-					self.smartClip.hidePoints()
+					self.smartClip.geomType().hideMeasurements()
+					self.smartClip.geomType().hidePoints()
 					comp_items.hideAllFaces()
-					self.smartClip.createBeamsConnectorClipSide()
+					self.smartClip.beamType().createBeamsConnectorClipSide()
 					
 					self.pageContainer.updateCurrentWidgetInfo()
 					
@@ -145,10 +142,10 @@ class SmartClipDialog(object):
 			
 		elif stepId == 3:
 			
-			if self.smartClip.beamNodesCcs is None:
+			if self.smartClip.beamType().beamNodesCcs is None:
 				try:
 					comp_items.hideAllFaces()
-					self.smartClip.createBeamsConnectorClipContraSide()
+					self.smartClip.beamType().createBeamsConnectorClipContraSide()
 					
 					self.pageContainer.updateCurrentWidgetInfo()
 					
@@ -184,11 +181,19 @@ class SmartClipDialog(object):
 	
 	#-------------------------------------------------------------------------
 	
+	def setTypeGeom(self, index, geomType):
+			
+		self.setDftTypeGeom(index)
+		
+		self.smartClip.setGeomType(geomType)
+	
+	#-------------------------------------------------------------------------
+	
 	def setTypeBeam(self, index, beamType):
 			
 		self.setDftTypeBeam(index)
 		
-		self.smartClip = comp_items.getClipType(beamType)
+		self.smartClip.setBeamType(beamType)
 		
 	#-------------------------------------------------------------------------
 	@classmethod
