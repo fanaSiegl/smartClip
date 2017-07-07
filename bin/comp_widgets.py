@@ -178,6 +178,23 @@ class SelectConPage(StackWidgetPage):
 		self.pushButtonSelectCon = guitk.BCPushButtonCreate(self.contentLayout, "Select", self.conSelected, None)
 		guitk.BCGridLayoutAddWidget(self.contentLayout, self.pushButtonSelectCon, 1, 2, guitk.constants.BCAlignLeft)
 		
+		# create buttons for stop distance redefinition
+		stopDistances = ['xLow', 'xUp', 'yLow', 'yUp', 'zLow', 'zUp']
+		for i, stopDistanceName in enumerate(stopDistances):
+			button = guitk.BCPushButtonCreate(self.contentLayout, "Select",
+				#lambda buttonWidget, stopDistanceName: self.smartClip().redefineStopDistance(stopDistanceName),
+				lambda buttonWidget, stopDistanceName: self.redefineStopDistance(button, stopDistanceName),
+			stopDistanceName)
+			
+			guitk.BCGridLayoutAddWidget(self.contentLayout, button, 2+i, 2, guitk.constants.BCAlignLeft)
+	
+	#-------------------------------------------------------------------------
+    
+	def redefineStopDistance(self, buttonWidget, stopDistanceName):
+			
+		self.smartClip().redefineStopDistance(stopDistanceName)
+		
+		self.updateInfo()
 	
 	#-------------------------------------------------------------------------
     
@@ -219,7 +236,7 @@ class SelectClipNodesPage(StackWidgetPage):
 	def nodesSelected(self, buttonWidget=None, data=None):
 		
 		# reset selection and propt the new one
-		self.smartClip().beamNodesCs = None
+		self.smartClip().beamType().beamsCsDefined = False
 		self.parent.controller(None, None, 2, None)
 	
 	#-------------------------------------------------------------------------
@@ -239,7 +256,7 @@ class SelectClipContraNodesPage(SelectClipNodesPage):
 	def nodesSelected(self, buttonWidget=None, data=None):
 		
 		# reset selection and propt the new one
-		self.smartClip().beamNodesCcs = None
+		self.smartClip().beamType().beamsCcsDefined = False
 		self.parent.controller(None, None, 3, None)
 	
 	#-------------------------------------------------------------------------
@@ -276,20 +293,14 @@ class SelectClipTypePage(StackWidgetPage):
 		
 		# entity info
 		self._addContentLine( 'Beam type Info:', 'beamTypeInfo')
-
-		# add check box for mirror option
-		self.mirrorCheckBox = guitk.BCCheckBoxCreate(self.contentLayout, 'Mirror created clip')
-		guitk.BCGridLayoutAddWidget(self.contentLayout, self.mirrorCheckBox, 4, 0, guitk.constants.BCAlignLeft)
 		
 		# setup connections
 		guitk.BCComboBoxSetCurrentIndexChangedFunction(self.clipBeamTypeComboBox, self.beamTypeChanged, None)
 		guitk.BCComboBoxSetCurrentIndexChangedFunction(self.clipGeomTypeComboBox, self.geomTypeChanged, None)
-		guitk.BCCheckBoxSetToggledFunction(self.mirrorCheckBox, self.mirrorCheckBoxChanged, None)
 				
 		# set initial values
 		guitk.BCComboBoxSetCurrentItem(self.clipBeamTypeComboBox, self.parent.DFT_TYPE_BEAM)
 		guitk.BCComboBoxSetCurrentItem(self.clipGeomTypeComboBox, self.parent.DFT_TYPE_GEOM)
-		guitk.BCCheckBoxSetChecked(self.mirrorCheckBox, self.parent.DFT_MIRROR_CLIP)
 
 
 		#guitk.BCLabelSetIconFileName(self.beamTypeInfo_label, self.smartClip().ICON)
@@ -302,18 +313,7 @@ class SelectClipTypePage(StackWidgetPage):
 	#-------------------------------------------------------------------------
 
 	def geomTypeChanged(self, comboBox, index, data):
-		
-		#self._setInfoAttributeValue('geomTypeInfo', 'This is an info about clip topology of the type: %s.' % index)
-		
-		#if index == 0:
-		#	guitk.BCLabelSetIconFileName(self.geomTypeInfo_label, os.path.join(PATH_RES, 'icons', 'clip_geom_standart.png'))
-		#elif index == 1:
-		#	guitk.BCLabelSetIconFileName(self.geomTypeInfo_label, os.path.join(PATH_RES, 'icons','clip_geom_example.png'))
-
-		#self.parent.setDftTypeGeom(index)
-		
-		
-		
+				
 		geomType = guitk.BCComboBoxGetText(comboBox, index)
 		self.parent.setTypeGeom(index, geomType)
 		
@@ -332,13 +332,26 @@ class SelectClipTypePage(StackWidgetPage):
 				
 		guitk.BCLabelSetIconFileName(self.beamTypeInfo_label, self.smartClip().beamType().ICON)
 	
+
+		
+# ==============================================================================
+
+class MirrorClipPage(StackWidgetPage):
+	
+	def createContent(self):
+		
+		# add check box for mirror option
+		self.mirrorCheckBox = guitk.BCCheckBoxCreate(self.contentLayout, 'Mirror created clip')
+		guitk.BCGridLayoutAddWidget(self.contentLayout, self.mirrorCheckBox, 0, 0, guitk.constants.BCAlignLeft)
+		
+		# setup connections
+		guitk.BCCheckBoxSetToggledFunction(self.mirrorCheckBox, self.mirrorCheckBoxChanged, None)
+		
+		# set initial values
+		guitk.BCCheckBoxSetChecked(self.mirrorCheckBox, self.parent.DFT_MIRROR_CLIP)
+
 	#-------------------------------------------------------------------------
 
 	def mirrorCheckBoxChanged(self, checkBox, state, data):
 
 		self.parent.setDftMirrorClipState(state)
-		
-# ==============================================================================
-
-
-		

@@ -62,6 +62,7 @@ class SmartClipDialog(object):
 		self.page1 = comp_widgets.SelectConPage(self, 'Select CON', 'Select the guiding clip edge - CON')
 		self.page2 = comp_widgets.SelectClipNodesPage(self, 'Select NODES', 'Select NODES for CONNECTOR on the clip')
 		self.page3 = comp_widgets.SelectClipContraNodesPage(self, 'Select NODES', 'Select NODES for CONNECTOR on the clip contra side')
+		self.page3 = comp_widgets.MirrorClipPage(self, 'Mirror clip', 'Do you want to mirror created clip?')
 		
 		#self.statusBar = guitk.BCStatusBarCreate(self.mainWindow)
 		
@@ -115,7 +116,7 @@ class SmartClipDialog(object):
 				
 		elif stepId == 2:
 			
-			if self.smartClip.beamType().beamNodesCs is None:
+			if not self.smartClip.beamType().beamsCsDefined:
 				try:
 					self.smartClip.beamType().createNodesForConnector()
 					self.smartClip.beamType().createConnector()
@@ -142,16 +143,12 @@ class SmartClipDialog(object):
 			
 		elif stepId == 3:
 			
-			if self.smartClip.beamType().beamNodesCcs is None:
+			if not self.smartClip.beamType().beamsCcsDefined:
 				try:
 					comp_items.hideAllFaces()
 					self.smartClip.beamType().createBeamsConnectorClipContraSide()
 					
 					self.pageContainer.updateCurrentWidgetInfo()
-					
-					# create mirrored clip
-					if self.DFT_MIRROR_CLIP:
-						comp_items.SymmetricalClip(self.smartClip)
 					
 					#guitk.BCButtonSetText(self.pushButtonNext, 'Finish')
 					if not guitk.BCWizardIsNextButtonEnabled(self.mainWindow):
@@ -257,6 +254,9 @@ def showQuestion(message):
 def newClip(window, parent):
 		
 		initialEntities = parent.initialEntities
+		# create mirrored clip as the last step
+		if parent.DFT_MIRROR_CLIP:
+			comp_items.SymmetricalClip(parent.smartClip)
 		
 		guitk.BCDestroyLater(window)
 		#guitk.BCDestroy(window)

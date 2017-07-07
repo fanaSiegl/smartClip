@@ -149,6 +149,7 @@ class SmartClip(object):
 	
 	def _setupF11drawingSettings(self):
 		
+		base.SetCurrentMenu('TOPO')
 		ansa.base.F11PresParamsOptionsSet("Coords", 'Relative to screen (%)', 50.0)
 	
 	#-------------------------------------------------------------------------
@@ -167,6 +168,8 @@ class StandartGeomType(metaclass=GeomTypeMetaClass):
 	INFO ='Standart geometrical clip type.'
 	ICON = os.path.join(PATH_RES, 'icons', 'clip_geom_standart.png')
 	
+	CONNECTOR_LENGTH = 1.0
+	
 	def __init__(self, parentClip):
 		
 		self.parentClip = parentClip
@@ -174,7 +177,15 @@ class StandartGeomType(metaclass=GeomTypeMetaClass):
 		self.selectedCon = None
 		self.clipEntities= self.parentClip.clipEntities
 		
-		self.stopDistanceMeasurements = list()
+		self.stopDistanceMeasurements = dict()
+		self.stopDistanceFaceCouples = dict()
+		
+		self.xLow = -1000
+		self.xUp = 1000
+		self.yLow = -1000
+		self.yUp = 1000
+		self.zLow = -1000
+		self.zUp = 1000
 			    
     #-------------------------------------------------------------------------
     
@@ -206,17 +217,21 @@ class StandartGeomType(metaclass=GeomTypeMetaClass):
 		
 		else:
 		#if projectedPointCoords is None:
-			showMessage("Projection to given faces not found within given tolerance of %s mm! Please select the %s manually." % (tolerance, searchedFaceName))
-			face = set(base.PickEntities(constants.ABAQUS, "FACE"))
-			projectedPointCoords =ansa.base.ProjectPointDirectional(
-				face, pointCoords[0], pointCoords[1], pointCoords[2],
-				vector[0], vector[1], vector[2], tolerance, project_on="faces")
+			#showMessage("Projection to given faces not found within given tolerance of %s mm! Please select the %s manually." % (tolerance, searchedFaceName))
+			print("Projection to given faces not found within given tolerance of %s mm! Please select the %s manually." % (tolerance, searchedFaceName))
+			#face = set(base.PickEntities(constants.ABAQUS, "FACE"))
+			#projectedPointCoords =ansa.base.ProjectPointDirectional(
+			#	face, pointCoords[0], pointCoords[1], pointCoords[2],
+			#	vector[0], vector[1], vector[2], tolerance, project_on="faces")
+		
+			face = None
+			projectedPointCoords = None
 		
 		return face, projectedPointCoords
 
 	#-------------------------------------------------------------------------
 	
-	def _getStopDistance(self, clipFacePoint, mateFacePoint, direction=1):
+	def _getStopDistance(self, clipFacePoint, mateFacePoint, measurementDescription):
 
 # TODO: get rid of redundant measurement entities and use just 2 point distance
 # np.linalg.norm(np.array(clipFacePoint) - np.array(self.centerCoordNode))
@@ -245,9 +260,10 @@ class StandartGeomType(metaclass=GeomTypeMetaClass):
 		base.DeleteEntity(mNodeClipFace)
 		base.DeleteEntity(mNodeMateFace)
 		
-		self.stopDistanceMeasurements.append(mFace2face)
 		
-		return faceDist*direction
+		self.stopDistanceMeasurements[measurementDescription] = mFace2face
+		
+		return faceDist
 				
 	#-------------------------------------------------------------------------
     
@@ -295,7 +311,7 @@ class StandartGeomType(metaclass=GeomTypeMetaClass):
 		
 		# create points for coordinate system
 		self.middlePointCoords = getConMiddle(self.selectedCon)
-		#self.topEdgeMiddleCoords = getConMiddle(oppositeCon)
+		self.topPointCoords = np.median([self.middlePointCoords, getConMiddle(oppositeCon)], axis=0)
 		
 		# guiding face normals
 		self.smallFaceNormal = base.GetFaceOrientation(self.smallFace)
@@ -308,7 +324,8 @@ class StandartGeomType(metaclass=GeomTypeMetaClass):
 		self.oppositeProjectionVector = -1*np.array(self.largeFaceNormal)
 		self.oppositeFace, self.oppositeFacePointCoords = self._getPointProjectionCoords(
 			clipFaces, self.middlePointCoords, self.oppositeProjectionVector, searchedFaceName='z lower face - clip side')
-		self.oppositeFacePoint = base.Newpoint(*self.oppositeFacePointCoords)
+		if self.oppositeFacePointCoords is not None:
+			self.oppositeFacePoint = base.Newpoint(*self.oppositeFacePointCoords)
 		
 		# front face point
 		self.frontFacePointCoords = self.middlePointCoords + 1*np.array(self.smallFaceNormal)
@@ -328,22 +345,24 @@ class StandartGeomType(metaclass=GeomTypeMetaClass):
 		self.sideFacePlus, sidePlusPointCoords = self._getPointProjectionCoords(
 			searchOnFaces, self.centerCoordPointCoords, self.sideProjectionVectorPlus, searchedFaceName='x upper face - clip side')
 		# move a point lower
-		self.sidePlusPointCoords = sidePlusPointCoords + 1*np.array(self.smallFaceNormal)
-		self.sideFacePlusPoint = base.Newpoint(*self.sidePlusPointCoords)
+		if sidePlusPointCoords is not None:
+			self.sidePlusPointCoords = sidePlusPointCoords + 1*np.array(self.smallFaceNormal)
+			self.sideFacePlusPoint = base.Newpoint(*self.sidePlusPointCoords)
 		
 		searchOnFaces.remove(self.sideFacePlus)
 		self.sideProjectionVectorMinus = np.cross(self.oppositeProjectionVector, self.smallFaceNormal)
 		self.sideFaceMinus, sideMinusPointCoords = self._getPointProjectionCoords(
 			searchOnFaces, self.centerCoordPointCoords, self.sideProjectionVectorMinus, searchedFaceName='x lower face - clip side')
 		# move a point lower
-		self.sideMinusPointCoords = sideMinusPointCoords + 1*np.array(self.smallFaceNormal)
-		self.sideFaceMinusPoint = base.Newpoint(*self.sideMinusPointCoords)
+		if sideMinusPointCoords is not None:
+			self.sideMinusPointCoords = sideMinusPointCoords + 1*np.array(self.smallFaceNormal)
+			self.sideFaceMinusPoint = base.Newpoint(*self.sideMinusPointCoords)
 		
 		# this is correct orthogonal vector that a small face should have in case of 90 degrees...
 		self.smallFaceOrthoVector = np.cross(self.largeFaceNormal, self.sideProjectionVectorMinus)
 		
 	#-------------------------------------------------------------------------
-    
+
 	def setStopDistances(self, hideMeasurements=True):
 		
 		# searching for distances
@@ -354,88 +373,219 @@ class StandartGeomType(metaclass=GeomTypeMetaClass):
 		# hide property
 		ent = base.CollectEntities(constants.ABAQUS, [self.clipProperty], "FACE", filter_visible=True )
 		status = base.Not(ent, constants.ABAQUS)
-		
+	
 		# find faces on clip mate geometry
 		neighbourFaces = base.CollectEntities(constants.ABAQUS, None, "FACE", filter_visible=True)
 		self.neighbourFaces = sortEntities(neighbourFaces, base.GetFaceArea)
 		
 		#base.PickEntities(constants.ABAQUS, "FACE",  initial_entities = self.neighbourFaces)
 		
-		# find opposite projection mate
-		self.oppositeNeighbourFace, self.oppositeNeighbourFacePointCoords = self._getPointProjectionCoords(
-			self.neighbourFaces, self.oppositeFacePointCoords, self.oppositeProjectionVector, searchedFaceName='z lower face - clip contra side')
-		self.oppositeNeighbourFacePoint = base.Newpoint(*self.oppositeNeighbourFacePointCoords)
-		self.zLow = 1+self._getStopDistance(self.oppositeFacePoint, self.oppositeNeighbourFacePoint, -1)
+		stopDistanceMethods = [self.findZlowDist, self.findZupDist, self.findXupDist, self.findXlowDist,
+			self.findYupDist, self.findYlowDist]
+		for stopDistanceMethod in stopDistanceMethods:
+			try:
+				stopDistanceMethod()
+			except Exception as e:
+				continue
+			
+		#self.findZlowDist()
+		#self.findZupDist()
+		#self.findXupDist()
+		#self.findXlowDist()
+		#self.findYupDist()
+		#self.findYlowDist()
 		
-		# find front projection mate
-		self.frontNeighbourFace, self.frontNeighbourFacePointCoords = self._getPointProjectionCoords(
-			self.neighbourFaces, self.frontFacePointCoords, self.largeFaceNormal, searchedFaceName='z upper face - clip contra side')
-		self.frontNeighbourFacePoint = base.Newpoint(*self.frontNeighbourFacePointCoords)
-		self.zUp = 1+self._getStopDistance(self.frontFacePoint, self.frontNeighbourFacePoint)
-		
-		# find side plus projection mate
-		self.sidePlusNeighbourFace, self.sidePlusNeighbourFacePointCoords = self._getPointProjectionCoords(
-			self.neighbourFaces, self.sidePlusPointCoords, self.sideProjectionVectorPlus, searchedFaceName='x upper face - clip contra side')
-		self.sidePlusNeighbourFacePoint = base.Newpoint(*self.sidePlusNeighbourFacePointCoords)
-		self.xUp = self._getStopDistance(self.sideFacePlusPoint, self.sidePlusNeighbourFacePoint)
-		
-		# find side minus projection mate
-		self.sideMinusNeighbourFace, self.sideMinusNeighbourFacePointCoords = self._getPointProjectionCoords(
-			self.neighbourFaces, self.sideMinusPointCoords, self.sideProjectionVectorMinus, searchedFaceName='x lower face - clip contra side')
-		self.sideMinusNeighbourFacePoint = base.Newpoint(*self.sideMinusNeighbourFacePointCoords)
-		self.xLow = self._getStopDistance(self.sideFaceMinusPoint, self.sideMinusNeighbourFacePoint, -1)
-		
-		# find top projection mate - created after the front gap distance is known - zUp
-		#moveNormVector = np.array(self.largeFaceNormal)/ np.linalg.norm(np.array(self.largeFaceNormal))
-		#self.topPointCoords = self.middlePointCoords + (self.zUp-1 + 0.1)*moveNormVector
-
-# TODO: get rid of this non sence condition (- due to reversed clip devel)
-		if not hasattr(self, 'topPointCoords'):
-			self.topPointCoords = self.middlePointCoords + (self.zUp-1 + 0.1)*np.array(self.largeFaceNormal)
-			self.topPoint = base.Newpoint(*self.topPointCoords)
-		
-		self.topNeighbourFace, self.topNeighbourFacePointCoords = self._getPointProjectionCoords(
-			self.neighbourFaces, self.topPointCoords, self.smallFaceNormal, searchedFaceName='y upper face - clip contra side')
-		self.topNeighbourFacePoint = base.Newpoint(*self.topNeighbourFacePointCoords)
-		self.yUp = self._getStopDistance(self.topPoint, self.topNeighbourFacePoint)
-		
-		self.yLow = -1000
-		
-		#print(xLow, xUp, yUp, yLow, zLow, zUp)
 		status = base.And(ent, constants.ABAQUS)
 		
 		if hideMeasurements:
 			self.hideMeasurements()
-		
-	#-------------------------------------------------------------------------
-    
-	def hideMeasurements(self):
-		
-		status = base.Not(self.stopDistanceMeasurements, constants.ABAQUS)
 	
 	#-------------------------------------------------------------------------
-    
+
+	def findZlowDist(self):		
+		# find opposite projection mate
+		self.oppositeNeighbourFace, self.oppositeNeighbourFacePointCoords = self._getPointProjectionCoords(
+			self.neighbourFaces, self.oppositeFacePointCoords, self.oppositeProjectionVector, searchedFaceName='z lower face - clip contra side')
+		self.oppositeNeighbourFacePoint = base.Newpoint(*self.oppositeNeighbourFacePointCoords)
+		self.zLow = self.CONNECTOR_LENGTH - 1*self._getStopDistance(self.oppositeFacePoint, self.oppositeNeighbourFacePoint, 'zLow')
+		
+		self.stopDistanceFaceCouples['zLow'] = [self.oppositeFace, self.oppositeNeighbourFace]
+		
+	#-------------------------------------------------------------------------
+
+	def findZupDist(self):
+		# find front projection mate
+		self.frontNeighbourFace, self.frontNeighbourFacePointCoords = self._getPointProjectionCoords(
+			self.neighbourFaces, self.frontFacePointCoords, self.largeFaceNormal, searchedFaceName='z upper face - clip contra side')
+		self.frontNeighbourFacePoint = base.Newpoint(*self.frontNeighbourFacePointCoords)
+		self.zUp = self.CONNECTOR_LENGTH + self._getStopDistance(self.frontFacePoint, self.frontNeighbourFacePoint, 'zUp')
+		
+		self.stopDistanceFaceCouples['zUp'] = [self.largeFace, self.frontNeighbourFace]
+		
+	#-------------------------------------------------------------------------
+
+	def findXupDist(self):
+		# find side plus projection mate
+		self.sidePlusNeighbourFace, self.sidePlusNeighbourFacePointCoords = self._getPointProjectionCoords(
+			self.neighbourFaces, self.sidePlusPointCoords, self.sideProjectionVectorPlus, searchedFaceName='x upper face - clip contra side')
+		self.sidePlusNeighbourFacePoint = base.Newpoint(*self.sidePlusNeighbourFacePointCoords)
+		self.xUp = self._getStopDistance(self.sideFacePlusPoint, self.sidePlusNeighbourFacePoint, 'xUp')
+		
+		self.stopDistanceFaceCouples['xUp'] = [self.sideFacePlus, self.sidePlusNeighbourFace]
+		
+	#-------------------------------------------------------------------------
+
+	def findXlowDist(self):
+		# find side minus projection mate
+		self.sideMinusNeighbourFace, self.sideMinusNeighbourFacePointCoords = self._getPointProjectionCoords(
+			self.neighbourFaces, self.sideMinusPointCoords, self.sideProjectionVectorMinus, searchedFaceName='x lower face - clip contra side')
+		self.sideMinusNeighbourFacePoint = base.Newpoint(*self.sideMinusNeighbourFacePointCoords)
+		self.xLow = -1*self._getStopDistance(self.sideFaceMinusPoint, self.sideMinusNeighbourFacePoint, 'xLow')
+		
+		self.stopDistanceFaceCouples['xLow'] = [self.sideFaceMinus, self.sideMinusNeighbourFace]
+
+	#-------------------------------------------------------------------------
+
+	def findYupDist(self):		
+		# find top neighbour face
+		self.topNeighbourFace, self.topNeighbourFacePointCoords = self._getPointProjectionCoords(
+			self.neighbourFaces, self.topPointCoords, self.smallFaceNormal, searchedFaceName='y upper face - clip contra side')
+		
+		# 1. find the edge of the front neighbour face and top neighbour face
+		# 2. find the projection of the front neighbour point on this edge
+		# 3. find projection of this point on the neighbour edge to the plane of the small clip face
+		# 4. this should be the smallest distance in Y direction
+		
+		# 1. find the edge of the front neighbour face and top neighbour face
+		def findEdge(face1, face2):
+			face1cons = base.CollectEntities(constants.ABAQUS, face1, "CONS")
+			for face1con in face1cons:
+				neighbourFaces = base.GetFacesOfCons(face1con)
+				if face2 in neighbourFaces:
+					return face1con
+			return None
+		
+		
+		neighbourTopEdgeCon = findEdge(self.frontNeighbourFace, self.topNeighbourFace)
+		if neighbourTopEdgeCon is None:
+# TODO: this is maybe enought?
+			frontNeighbourFaceCons = set(base.CollectEntities(constants.ABAQUS, self.frontNeighbourFace, "CONS"))
+			topNeighbourFaceCons = set(base.CollectEntities(constants.ABAQUS, self.topNeighbourFace, "CONS"))
+			neighbourTopEdgeCon = list(frontNeighbourFaceCons.intersection(topNeighbourFaceCons))[0]
+		
+		
+		# 2. find the projection of the front neighbour point on this edge
+		self.topNeighbourFacePointCoords = ansa.calc.ProjectPointToCons(self.frontNeighbourFacePointCoords, neighbourTopEdgeCon)[0]
+		self.topNeighbourFacePoint = base.Newpoint(*self.topNeighbourFacePointCoords)
+			
+		# 3. find projection of this point on the neighbour edge to the plane of the small clip face
+		self.topPointCoords = base.ProjectPointToPlane(self.topNeighbourFacePointCoords, 
+			self.middlePointCoords, self.smallFaceNormal)
+		self.topPoint = base.Newpoint(*self.topPointCoords)
+		
+		# 4. this should be the smallest distance in Y direction
+		self.yUp = self._getStopDistance(self.topPoint, self.topNeighbourFacePoint, 'yUp')
+		
+		self.stopDistanceFaceCouples['yUp'] = [self.smallFace, self.topNeighbourFace]
+		
+	#-------------------------------------------------------------------------
+
+	def findYlowDist(self):
+		self.yLow = -1000
+	
+	#-------------------------------------------------------------------------
+
+	def redefineStopDistance(self, stopDistName, alterName=None):
+		
+		self.hideMeasurements()
+		
+		if stopDistName in self.stopDistanceFaceCouples:
+			initialFaces = self.stopDistanceFaceCouples[stopDistName]
+		else:
+			initialFaces = list()
+		
+		if stopDistName in self.stopDistanceMeasurements:
+			base.And(self.stopDistanceMeasurements[stopDistName], constants.ABAQUS)
+		
+		selectedFaces = base.PickEntities(constants.ABAQUS, 'FACE', initial_entities=initialFaces)
+		
+		if selectedFaces is None:
+			self.showMeasurements()
+			return
+			#raise(SmartClipException('No faces defining STOP distance selected!'))
+		
+		measurementEntity = ansa.base.CreateMeasurement(selectedFaces, 'DISTANCE_GEOMETRY')
+		distance = round(getEntityProperty(measurementEntity, 'RESULT'), 2)
+
+# TODO: this should be solved some other way!! :(
+		# change name in order to different coordinate system direction
+		if alterName is not None:
+			stopDistName = alterName
+		
+		# fix directions
+		if stopDistName == 'zLow':
+			distance = self.CONNECTOR_LENGTH - 1*distance
+		elif stopDistName == 'zUp':
+			distance = self.CONNECTOR_LENGTH + distance
+		elif stopDistName == 'xLow':
+			distance = - 1*distance
+		elif stopDistName == 'yLow':
+			distance = - 1*distance
+		
+		try:
+			base.DeleteEntity(self.stopDistanceMeasurements[stopDistName], force=True)
+		except:
+			pass
+		
+		# set the new entities
+		self.stopDistanceMeasurements[stopDistName] = measurementEntity
+		self.stopDistanceFaceCouples[stopDistName] = selectedFaces
+		setattr(self, stopDistName, distance)
+		
+		self.showMeasurements()
+		
+	#-------------------------------------------------------------------------
+
+	def hideMeasurements(self):
+		
+		stopDistanceMeasurements = [v for v in self.stopDistanceMeasurements.values()]
+
+		status = base.Not(stopDistanceMeasurements, constants.ABAQUS)
+	
+	#-------------------------------------------------------------------------
+
+	def showMeasurements(self):
+		
+		stopDistanceMeasurements = [v for v in self.stopDistanceMeasurements.values()]
+
+		status = base.And(stopDistanceMeasurements, constants.ABAQUS)
+	
+	#-------------------------------------------------------------------------
+
 	def hidePoints(self):
 		
-		entities = [
-			self.oppositeFacePoint,
-			self.frontFacePoint,
-			self.sideFacePlusPoint,
-			self.sideFaceMinusPoint,
+		pointNames = [
+			'oppositeFacePoint',
+			'frontFacePoint',
+			'sideFacePlusPoint',
+			'sideFaceMinusPoint',
 			
-			
-			self.oppositeNeighbourFacePoint,
-			self.frontNeighbourFacePoint,
-			self.sidePlusNeighbourFacePoint,
-			self.sideMinusNeighbourFacePoint,
-			self.topPoint,
-			self.topNeighbourFacePoint,
+			'oppositeNeighbourFacePoint',
+			'frontNeighbourFacePoint',
+			'sidePlusNeighbourFacePoint',
+			'sideMinusNeighbourFacePoint',
+			'topPoint',
+			'topNeighbourFacePoint',
 			]
+		entities = list()
+		for pointName in pointNames:
+			if hasattr(self, pointName):
+				entities.append(getattr(self, pointName))
 		
 		status = base.Not(entities, constants.ABAQUS)
 	
 	#-------------------------------------------------------------------------
-    
+
 	def createCoorSystem(self):
 		
 		self.thirdPointCoords = np.array(self.middlePointCoords)+np.array(self.sideProjectionVectorPlus)
@@ -446,7 +596,19 @@ class StandartGeomType(metaclass=GeomTypeMetaClass):
 			'B1':  self.middlePointCoords[0], 'B2':  self.middlePointCoords[1], 'B3':  self.middlePointCoords[2],
 			'C1':  self.thirdPointCoords[0], 'C2':  self.thirdPointCoords[1], 'C3':  self.thirdPointCoords[2]}
 		self.coordSystem = base.CreateEntity(constants.ABAQUS, "ORIENTATION_R", vals)
+
+	#-------------------------------------------------------------------------
+	
+	def createSymmetricalCoorSys(self):
 		
+		thirdPointCoords = np.array([1,-1,1])*np.array(self.parentClip.middlePointCoords)+np.array([1,-1,1])*np.array(self.parentClip.sideProjectionVectorMinus)
+		
+		vals = {'Name': 'CLIP_COOR_SYS',
+			'A1':  self.parentClip.centerCoordPointCoords[0], 'A2':  -1*self.parentClip.centerCoordPointCoords[1], 'A3':  self.parentClip.centerCoordPointCoords[2],
+			'B1':  self.parentClip.middlePointCoords[0], 'B2':  -1*self.parentClip.middlePointCoords[1], 'B3':  self.parentClip.middlePointCoords[2],
+			'C1':  thirdPointCoords[0], 'C2':  thirdPointCoords[1], 'C3':  thirdPointCoords[2]}
+				
+		self.symmCoordSystem = base.CreateEntity(constants.ABAQUS, "ORIENTATION_R", vals)
 
 # ==============================================================================
 
@@ -528,7 +690,7 @@ class ReversedGeomType(StandartGeomType):
 		# projection to the small face
 		face, self.topPointCoords =  self._getPointProjectionCoords(
 			[self.smallFace], self.frontFacePointCoords, -1*self.largeFaceOrthoVector)
-		self.topPoint = base.Newpoint(*self.topPointCoords)
+		#self.topPoint = base.Newpoint(*self.topPointCoords)
 		
 		# find coordinates for coordinate system
 		self.centerCoordPointCoords = np.median([self.oppositeFacePointCoords, self.frontFacePointCoords], axis=0)
@@ -589,15 +751,74 @@ class ReversedGeomType(StandartGeomType):
 			'B1':  zPointCoords[0], 'B2':  zPointCoords[1], 'B3':  zPointCoords[2],
 			'C1':  self.thirdPointCoords[0], 'C2':  self.thirdPointCoords[1], 'C3':  self.thirdPointCoords[2]}
 		self.coordSystem = base.CreateEntity(constants.ABAQUS, "ORIENTATION_R", vals)
+
+	#-------------------------------------------------------------------------
+	
+	def createSymmetricalCoorSys(self):
 		
+		thirdPointCoords = np.array([1,-1,1])*np.array(self.centerCoordPointCoords) - np.array([1,-1,1])*np.array(self.sideProjectionVectorPlus)
+		
+		zPointCoords = self.centerCoordPointCoords + self.largeFaceNormal
+		
+		vals = {'Name': 'CLIP_COOR_SYS',
+			'A1':  self.centerCoordPointCoords[0], 'A2':  -1*self.centerCoordPointCoords[1], 'A3':  self.centerCoordPointCoords[2],
+			'B1':  zPointCoords[0], 'B2':  -1*zPointCoords[1], 'B3':  zPointCoords[2],
+			'C1':  thirdPointCoords[0], 'C2':  thirdPointCoords[1], 'C3':  thirdPointCoords[2]}
+				
+		self.symmCoordSystem = base.CreateEntity(constants.ABAQUS, "ORIENTATION_R", vals)
 
 # ==============================================================================
 
-class LockGeomType(StandartGeomType):
+class LockGeomType(ReversedGeomType):
 	
 	TYPE_NAME = 'Lock'
 	INFO ='Lock-like geometrical clip type.'
 	ICON = os.path.join(PATH_RES, 'icons', 'clip_geom_lock.png')
+
+	#-------------------------------------------------------------------------
+    
+	def createCoorSystem(self):
+		
+		self.thirdPointCoords = np.array(self.centerCoordPointCoords)+np.array(self.sideProjectionVectorMinus)
+		
+		zPointCoords = self.centerCoordPointCoords - self.largeFaceNormal
+		
+		# create coordinate system
+		vals = {'Name': 'CLIP_COOR_SYS',
+			'A1':  self.centerCoordPointCoords[0], 'A2':  self.centerCoordPointCoords[1], 'A3':  self.centerCoordPointCoords[2],
+			'B1':  zPointCoords[0], 'B2':  zPointCoords[1], 'B3':  zPointCoords[2],
+			'C1':  self.thirdPointCoords[0], 'C2':  self.thirdPointCoords[1], 'C3':  self.thirdPointCoords[2]}
+		self.coordSystem = base.CreateEntity(constants.ABAQUS, "ORIENTATION_R", vals)
+		
+		# fix normal direction for clip orientation
+		self.largeFaceNormal = -1*np.array(self.largeFaceNormal)
+	
+	#-------------------------------------------------------------------------
+
+	def redefineStopDistance(self, stopDistName):
+		
+		# reverse direction for xLow and xUp
+		if stopDistName == 'xLow':
+			super(LockGeomType, self).redefineStopDistance('xUp', 'xLow')
+		elif stopDistName == 'xUp':
+			super(LockGeomType, self).redefineStopDistance('xLow', 'xUp')
+		else:
+			super(LockGeomType, self).redefineStopDistance(stopDistName)
+	
+	#-------------------------------------------------------------------------
+	
+	def createSymmetricalCoorSys(self):
+		
+		thirdPointCoords = np.array([1,-1,1])*np.array(self.centerCoordPointCoords) + np.array([1,-1,1])*np.array(self.sideProjectionVectorPlus)
+		
+		zPointCoords = self.centerCoordPointCoords + self.largeFaceNormal
+		
+		vals = {'Name': 'CLIP_COOR_SYS',
+			'A1':  self.centerCoordPointCoords[0], 'A2':  -1*self.centerCoordPointCoords[1], 'A3':  self.centerCoordPointCoords[2],
+			'B1':  zPointCoords[0], 'B2':  -1*zPointCoords[1], 'B3':  zPointCoords[2],
+			'C1':  thirdPointCoords[0], 'C2':  thirdPointCoords[1], 'C3':  thirdPointCoords[2]}
+				
+		self.symmCoordSystem = base.CreateEntity(constants.ABAQUS, "ORIENTATION_R", vals)
 	
 # ==============================================================================
 
@@ -616,6 +837,11 @@ class AudiBeamType(metaclass=BeamTypeMetaClass):
 		
 		self.beamNodesCs = None
 		self.beamNodesCcs = None
+		self.selectedElementsBeamCs = list()
+		self.selectedElementsBeamCcs = list()
+		self.beamsCsDefined = False
+		self.beamsCcsDefined = False
+		
 		self.clipEntities= self.parentClip.clipEntities
 			
 	#-------------------------------------------------------------------------
@@ -708,11 +934,25 @@ class AudiBeamType(metaclass=BeamTypeMetaClass):
 		
 		# find nodes for initial selection
 		searchEntities = base.CollectEntities(constants.ABAQUS, None, "SHELL")
-		nearestElements = findNearestElements(
-			self.frontNeighbourFacePointCoords + 0.2*np.array(self.largeFaceNormal), searchEntities)
+		
+		# if no elements were selected before try to find the nearest ones
+		if len(self.selectedElementsBeamCcs) == 0:
+			# some points may not be defined because of non standart clip shape
+			try:
+				nearestElements = findNearestElements(
+					self.frontNeighbourFacePointCoords + 0.2*np.array(self.largeFaceNormal), searchEntities)
+			except Exception as e:
+				nearestElements = list()
+		else:
+			# delete already created beams
+			base.DeleteEntity(self.beamsCcs, force=True)
+			nearestElements = self.selectedElementsBeamCcs
 		
 		print('Select nodes for beam definition: CONNECTOR - CLIP contra side.')
 		selectedElements = base.PickEntities(constants.ABAQUS, "SHELL", initial_entities=nearestElements)
+		
+		if selectedElements is None:
+			raise(SmartClipException('No NODES selected for CONNECTOR - CLIP contra side!'))
 		
 		self.beamNodesCcs = base.CollectEntities(constants.ABAQUS, selectedElements, "NODE")
 		
@@ -728,6 +968,10 @@ class AudiBeamType(metaclass=BeamTypeMetaClass):
 		if len(self.beamNodesCcs) == 0:
 			self.beamNodesCcs = None
 			raise(SmartClipException('No NODES selected for CONNECTOR - CLIP contra side!'))
+		
+		# save selected elements for further re-selection
+		self.selectedElementsBeamCcs = selectedElements
+		self.beamsCcsDefined = True
 		
 		elements = base.NodesToElements(self.beamNodesCcs)
 	#TODO: check if all nodes belong to the one property!!
@@ -789,13 +1033,27 @@ class AudiBeamType(metaclass=BeamTypeMetaClass):
 		
 		# find nodes for initial selection
 		searchEntities = base.CollectEntities(constants.ABAQUS, None, "SHELL")
-		nearestElements = list()
-		for coords in [self.sidePlusPointCoords, self.centerCoordPointCoords, self.sideMinusPointCoords]:
-			nearestElements.extend(findNearestElements(coords, searchEntities))
-
+		
+		# if no elements were selected before try to find the nearest ones
+		if len(self.selectedElementsBeamCs) == 0:
+			nearestElements = list()
+			# some points may not be defined because of non standart clip shape
+			try:
+				for coords in [self.sidePlusPointCoords, self.centerCoordPointCoords, self.sideMinusPointCoords]:
+					nearestElements.extend(findNearestElements(coords, searchEntities))
+			except Exception as e:
+				pass
+		else:
+			# delete already created beams
+			base.DeleteEntity(self.beamsCs, force=True)
+			nearestElements = self.selectedElementsBeamCs
+		
 		print('Select nodes for beam definition: CONNECTOR - CLIP.')
 		selectedElements = base.PickEntities(constants.ABAQUS, "SHELL", initial_entities=nearestElements)
 		
+		if selectedElements is None:
+			raise(SmartClipException('No NODES selected for CONNECTOR - CLIP side!'))
+			
 		self.beamNodesCs = base.CollectEntities(constants.ABAQUS, selectedElements, "NODE")
 		
 		# create beams
@@ -811,6 +1069,10 @@ class AudiBeamType(metaclass=BeamTypeMetaClass):
 		if len(self.beamNodesCs) == 0:
 			self.beamNodesCs = None
 			raise(SmartClipException('No NODES selected for CONNECTOR - CLIP!'))
+		
+		# save selected elements for further re-selection
+		self.selectedElementsBeamCs = selectedElements
+		self.beamsCsDefined = True
 		
 		elements = base.NodesToElements(self.beamNodesCs)
 	#TODO: check if all nodes belong to the one property!!
@@ -1052,23 +1314,10 @@ class SymmetricalClip(object):
 		
 		self.parentClip = parentClip
 		
-		self.createSymmetricalCoorSys()
+		self.parentClip.createSymmetricalCoorSys()
 		self.mirrorClip()
 		self.updateConnectorOrienation()
 		self.showNearElements()
-	
-	#-------------------------------------------------------------------------
-	
-	def createSymmetricalCoorSys(self):
-		
-		thirdPointCoords = np.array([1,-1,1])*np.array(self.parentClip.middlePointCoords)+np.array([1,-1,1])*np.array(self.parentClip.sideProjectionVectorMinus)
-		
-		vals = {'Name': 'CLIP_COOR_SYS',
-			'A1':  self.parentClip.centerCoordPointCoords[0], 'A2':  -1*self.parentClip.centerCoordPointCoords[1], 'A3':  self.parentClip.centerCoordPointCoords[2],
-			'B1':  self.parentClip.middlePointCoords[0], 'B2':  -1*self.parentClip.middlePointCoords[1], 'B3':  self.parentClip.middlePointCoords[2],
-			'C1':  thirdPointCoords[0], 'C2':  thirdPointCoords[1], 'C3':  thirdPointCoords[2]}
-				
-		self.symmCoordSystem = base.CreateEntity(constants.ABAQUS, "ORIENTATION_R", vals)
 	
 	#-------------------------------------------------------------------------
 	
@@ -1105,7 +1354,7 @@ class SymmetricalClip(object):
 		
 		# update coor sys and connector behaviour
 		vals = {
-			'ORIENT_1': self.symmCoordSystem._id,
+			'ORIENT_1': self.parentClip.symmCoordSystem._id,
 			'MID' : newConnectorBehavior._id}
 		base.SetEntityCardValues(constants.ABAQUS, newConnectorSection, vals)
 	
@@ -1316,9 +1565,9 @@ NOTE:
 	
 # ==============================================================================
 
-if __name__ == '__main__':
+#if __name__ == '__main__':
 #	runSmartClip('Reversed', 'SKODA')
-	#runSmartClip('Standart', 'SKODA')
+#	runSmartClip('Standart', 'SKODA')
 #	runSmartClip('Standart', 'AUDI')
-	runSmartClip('Reversed', 'AUDI')
+#	runSmartClip('Reversed', 'AUDI')
 
