@@ -15,7 +15,7 @@ try:
 	sys.path.append(PATH_BIN)
 	import util
 	
-	print('Runnig devel version ', __file__)
+#	print('Runnig devel version ', __file__)
 	
 except ImportError as e:
 	ansa.ImportCode(os.path.join(PATH_BIN, 'util.py'))
@@ -1188,7 +1188,7 @@ class SkodaBeamType(AudiBeamType):
 	def createConnector(self):
 		
 		# create connector elasticity
-		vals = {'Name': 'CONNECTOR ELASTICITY',
+		vals = {'Name': 'CONNECTOR_ELASTICITY',
 			 'COMP': 'YES',
 			 'COMP(1)': 'YES', 'El.Stiff.(1)': self.CONNECTOR_ELASTICITY[0],
 			 'COMP(2)': 'YES', 'El.Stiff.(2)': self.CONNECTOR_ELASTICITY[1],
@@ -1200,34 +1200,27 @@ class SkodaBeamType(AudiBeamType):
 		self.connectorElasticity = base.CreateEntity(constants.ABAQUS, "CONNECTOR_ELASTICITY", vals)
 	
 		# create connector stop
-		vals = {'Name': 'CONNECTOR STOP',
+		vals = {'Name': 'CONNECTOR_STOP_C1_C2',
 			 'COMP (1)': 'YES', 'Low.Lim.(1)': self.xLow, 'Up.Lim.(1)': self.xUp, 
 			 'COMP (2)': 'YES', 'Low.Lim.(2)': self.yLow, 'Up.Lim.(2)': self.yUp, 
 			 'COMP (3)': 'YES', 'Low.Lim.(3)': self.zLow, 'Up.Lim.(3)': self.zUp, 
 			}
 		self.connectorStop = base.CreateEntity(constants.ABAQUS, "CONNECTOR_STOP", vals)
 		
-	
 		# create connector behavior
-		vals = {'Name': 'CONNECTOR BEHAVIOR',
+		vals = {'Name': 'CONNECTOR_BEHAVIOR_C1_C2',
 			'*ELASTICITY': 'YES', 'EL>data': self.connectorElasticity._id,
 			'*STOP':'YES', 'STP>data': self.connectorStop._id,
 			}
 		self.connectorBehavior = base.CreateEntity(constants.ABAQUS, "CONNECTOR BEHAVIOR", vals)
 		
 		# create a connector section
-		vals = {'Name': 'CONNECTOR_SECTION',
+		vals = {'Name': 'CONNECTOR_SECTION_C1_C2',
 			 'MID': self.connectorBehavior._id,
 			'COMPONENT_1': 'CARDAN', 'COMPONENT_2':  'CARTESIAN', 'ORIENT_1': self.coordSystem._id,
 			}
 		self.connectorSection = base.CreateEntity(constants.ABAQUS, "CONNECTOR_SECTION", vals)
-		
-		# create a connector C3
-		vals = {'Name': 'CONNECTOR_C3',
-			'PID': self.connectorSection._id,
-			'G1':  self.con3Node1._id, 'G2': self.con3Node2._id}
-		self.connectorC3 = base.CreateEntity(constants.ABAQUS, "CONNECTOR", vals)
-		
+				
 		# create a connector C1
 		vals = {'Name': 'CONNECTOR_C1',
 			'PID': self.connectorSection._id,
@@ -1239,6 +1232,34 @@ class SkodaBeamType(AudiBeamType):
 			'PID': self.connectorSection._id,
 			'G1':  self.con2Node1._id, 'G2': self.con2Node2._id}
 		self.connectorC2 = base.CreateEntity(constants.ABAQUS, "CONNECTOR", vals)
+		
+		
+		
+		# create connector stop for CONNECTOR C3
+		vals = {'Name': 'CONNECTOR_STOP_C3',
+			 'COMP (3)': 'YES', 'Low.Lim.(3)': self.zLow, 'Up.Lim.(3)': self.zUp, 
+			}
+		self.connectorStopC3 = base.CreateEntity(constants.ABAQUS, "CONNECTOR_STOP", vals)
+		
+		# create connector behavior for CONNECTOR C3
+		vals = {'Name': 'CONNECTOR_BEHAVIOR_C3',
+			'*ELASTICITY': 'YES', 'EL>data': self.connectorElasticity._id,
+			'*STOP':'YES', 'STP>data': self.connectorStopC3._id,
+			}
+		self.connectorBehaviorC3 = base.CreateEntity(constants.ABAQUS, "CONNECTOR BEHAVIOR", vals)
+		
+		# create a connector section for CONNECTOR C3
+		vals = {'Name': 'CONNECTOR_SECTION_C3',
+			 'MID': self.connectorBehaviorC3._id,
+			'COMPONENT_1': 'CARDAN', 'COMPONENT_2':  'CARTESIAN', 'ORIENT_1': self.coordSystem._id,
+			}
+		self.connectorSectionC3 = base.CreateEntity(constants.ABAQUS, "CONNECTOR_SECTION", vals)
+		
+		# create a connector C3
+		vals = {'Name': 'CONNECTOR_C3',
+			'PID': self.connectorSectionC3._id,
+			'G1':  self.con3Node1._id, 'G2': self.con3Node2._id}
+		self.connectorC3 = base.CreateEntity(constants.ABAQUS, "CONNECTOR", vals)
 		
 		self.clipEntities.extend([self.connectorC1, self.connectorC2, self.connectorC3])
 		
@@ -1333,30 +1354,41 @@ class SymmetricalClip(object):
 	
 	def updateConnectorOrienation(self):
 		
-		# find the PID of the new mirrored connectors
-		newConnectorSectionID = getEntityProperty(list(self.newConnectors)[0], 'PID')
-		newConnectorSection = base.GetEntity(constants.ABAQUS, "CONNECTOR_SECTION", newConnectorSectionID)		
+		# find the PID of the new mirrored connectors		
+		newConnectorSections = base.CollectEntities(constants.ABAQUS, self.newConnectors, "CONNECTOR_SECTION", recursive=True)
+	
+		# update individually each connector section
+		for newConnectorSection in newConnectorSections:
+			newConnectorBehaviorID = getEntityProperty(newConnectorSection, 'MID')
+			newConnectorBehavior = base.GetEntity(constants.ABAQUS, "CONNECTOR BEHAVIOR", newConnectorBehaviorID)
+			
+			connectorStopID =  getEntityProperty(newConnectorBehavior, 'STP>data')
+			connectorStop = base.GetEntity(constants.ABAQUS, "CONNECTOR_STOP", connectorStopID)
+			
+			vals = dict()
+			vals['Name'] = getEntityProperty(connectorStop, 'Name')
+			xLow = getEntityProperty(connectorStop, 'COMP (1)')
+			if xLow == 'YES':
+				vals.update({'COMP (1)': 'YES', 'Low.Lim.(1)': -1*self.parentClip.xUp, 'Up.Lim.(1)': -1*self.parentClip.xLow,
+				 'COMP (2)': 'YES', 'Low.Lim.(2)': self.parentClip.yLow, 'Up.Lim.(2)': self.parentClip.yUp})
+			
+			vals.update({ 'COMP (3)': 'YES', 'Low.Lim.(3)': self.parentClip.zLow, 'Up.Lim.(3)': self.parentClip.zUp})
+			
+			# create the new connector stop
+			newConnectorStop = base.CreateEntity(constants.ABAQUS, "CONNECTOR_STOP", vals)
 		
-		# create the new connector stop
-		vals = {'Name': 'CONNECTOR STOP',
-			 'COMP (1)': 'YES', 'Low.Lim.(1)': -1*self.parentClip.xUp, 'Up.Lim.(1)': -1*self.parentClip.xLow, 
-			 'COMP (2)': 'YES', 'Low.Lim.(2)': self.parentClip.yLow, 'Up.Lim.(2)': self.parentClip.yUp, 
-			 'COMP (3)': 'YES', 'Low.Lim.(3)': self.parentClip.zLow, 'Up.Lim.(3)': self.parentClip.zUp, 
-			}
-		newConnectorStop = base.CreateEntity(constants.ABAQUS, "CONNECTOR_STOP", vals)
-		
-		# create the new connector behavior
-		vals = {'Name': 'CONNECTOR BEHAVIOR',
-			'*ELASTICITY': 'YES', 'EL>data': self.parentClip.connectorElasticity._id,
-			'*STOP':'YES', 'STP>data': newConnectorStop._id,
-			}
-		newConnectorBehavior = base.CreateEntity(constants.ABAQUS, "CONNECTOR BEHAVIOR", vals)
-		
-		# update coor sys and connector behaviour
-		vals = {
-			'ORIENT_1': self.parentClip.symmCoordSystem._id,
-			'MID' : newConnectorBehavior._id}
-		base.SetEntityCardValues(constants.ABAQUS, newConnectorSection, vals)
+			# create the new connector behavior
+			vals = {'Name': getEntityProperty(newConnectorBehavior, 'Name'),
+				'*ELASTICITY': 'YES', 'EL>data': self.parentClip.connectorElasticity._id,
+				'*STOP':'YES', 'STP>data': newConnectorStop._id,
+				}
+			newConnectorBehavior = base.CreateEntity(constants.ABAQUS, "CONNECTOR BEHAVIOR", vals)
+			
+			# update coor sys and connector behaviour
+			vals = {
+				'ORIENT_1': self.parentClip.symmCoordSystem._id,
+				'MID' : newConnectorBehavior._id}
+			base.SetEntityCardValues(constants.ABAQUS, newConnectorSection, vals)
 	
 	#-------------------------------------------------------------------------
 	

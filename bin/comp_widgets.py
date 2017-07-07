@@ -16,7 +16,7 @@ try:
 	import util
 	import comp_items
 	
-	print('Runnig devel version ', __file__)
+#	print('Runnig devel version ', __file__)
 	
 except ImportError as e:
 	ansa.ImportCode(os.path.join(PATH_BIN, 'util.py'))
