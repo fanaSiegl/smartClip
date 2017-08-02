@@ -191,8 +191,11 @@ class SelectConPage(StackWidgetPage):
 	#-------------------------------------------------------------------------
     
 	def redefineStopDistance(self, buttonWidget, stopDistanceName):
-			
-		self.smartClip().redefineStopDistance(stopDistanceName)
+		
+		try:
+			self.smartClip().redefineStopDistance(stopDistanceName)
+		except Exception as e:
+			self.parent._showStatusBarMessage(str(e))
 		
 		self.updateInfo()
 	

@@ -15,7 +15,7 @@ try:
 	sys.path.append(PATH_BIN)
 	import util
 	
-#	print('Runnig devel version ', __file__)
+	print('Runnig devel version ', __file__)
 	
 except ImportError as e:
 	ansa.ImportCode(os.path.join(PATH_BIN, 'util.py'))
@@ -402,25 +402,25 @@ class StandartGeomType(metaclass=GeomTypeMetaClass):
 	
 	#-------------------------------------------------------------------------
 
-	def findZlowDist(self):		
+	def findZupDist(self):
 		# find opposite projection mate
 		self.oppositeNeighbourFace, self.oppositeNeighbourFacePointCoords = self._getPointProjectionCoords(
-			self.neighbourFaces, self.oppositeFacePointCoords, self.oppositeProjectionVector, searchedFaceName='z lower face - clip contra side')
+			self.neighbourFaces, self.oppositeFacePointCoords, self.oppositeProjectionVector, searchedFaceName='z upper face - clip contra side')
 		self.oppositeNeighbourFacePoint = base.Newpoint(*self.oppositeNeighbourFacePointCoords)
-		self.zLow = self.CONNECTOR_LENGTH - 1*self._getStopDistance(self.oppositeFacePoint, self.oppositeNeighbourFacePoint, 'zLow')
+		self.zUp = self.CONNECTOR_LENGTH + self._getStopDistance(self.oppositeFacePoint, self.oppositeNeighbourFacePoint, 'zUp')
 		
-		self.stopDistanceFaceCouples['zLow'] = [self.oppositeFace, self.oppositeNeighbourFace]
+		self.stopDistanceFaceCouples['zUp'] = [self.oppositeFace, self.oppositeNeighbourFace]
 		
 	#-------------------------------------------------------------------------
 
-	def findZupDist(self):
+	def findZlowDist(self):
 		# find front projection mate
 		self.frontNeighbourFace, self.frontNeighbourFacePointCoords = self._getPointProjectionCoords(
-			self.neighbourFaces, self.frontFacePointCoords, self.largeFaceNormal, searchedFaceName='z upper face - clip contra side')
+			self.neighbourFaces, self.frontFacePointCoords, self.largeFaceNormal, searchedFaceName='z lower face - clip contra side')
 		self.frontNeighbourFacePoint = base.Newpoint(*self.frontNeighbourFacePointCoords)
-		self.zUp = self.CONNECTOR_LENGTH + self._getStopDistance(self.frontFacePoint, self.frontNeighbourFacePoint, 'zUp')
+		self.zLow = self.CONNECTOR_LENGTH - 1*self._getStopDistance(self.frontFacePoint, self.frontNeighbourFacePoint, 'zLow')
 		
-		self.stopDistanceFaceCouples['zUp'] = [self.largeFace, self.frontNeighbourFace]
+		self.stopDistanceFaceCouples['zLow'] = [self.largeFace, self.frontNeighbourFace]
 		
 	#-------------------------------------------------------------------------
 
@@ -511,10 +511,65 @@ class StandartGeomType(metaclass=GeomTypeMetaClass):
 		
 		if selectedFaces is None:
 			self.showMeasurements()
-			return
-			#raise(SmartClipException('No faces defining STOP distance selected!'))
+			raise(SmartClipException('No faces defining STOP distance selected!'))
+			
 		
-		measurementEntity = ansa.base.CreateMeasurement(selectedFaces, 'DISTANCE_GEOMETRY')
+		if len(selectedFaces) != 2:
+			self.showMeasurements()
+			raise(SmartClipException('Please select just two faces.'))
+			
+		
+		if alterName is not None:
+			stopDistName = alterName
+		
+		stopDistanceDirections = {
+			#'zUp' : self.oppositeProjectionVector,
+			#'zLow' : self.largeFaceNormal,
+			'xUp' :  self.sideProjectionVectorPlus,
+			'xLow' :  self.sideProjectionVectorMinus
+			}
+		# apply non-normal face measurement
+		if stopDistName in stopDistanceDirections:
+		
+			# find points and their distance
+			mateProperty = None
+			faceProperties = dict()
+			for face in selectedFaces:
+				faceProperty = base.GetEntity(constants.NASTRAN, 'PSHELL', getEntityProperty(face, 'PID'))
+				faceProperties[faceProperty] = face
+				if faceProperty != self.clipProperty:
+					mateProperty = faceProperty
+			
+			if mateProperty is None:
+				self.showMeasurements()
+				raise(SmartClipException('Selected faces must have different property!'))
+				
+			
+			mateFace = faceProperties[mateProperty]
+			projectionVector = stopDistanceDirections[stopDistName]
+			
+			measurementEntity = None
+			# move the middle point until the projection is found
+			for inc in range(-20, 20):
+				pointCoords = self.centerCoordPointCoords + 0.5*float(inc)*np.array(self.smallFaceOrthoVector)
+				face, matePointCoords = self._getPointProjectionCoords([mateFace], pointCoords, projectionVector, tolerance=100)
+				
+				if matePointCoords is not None:
+					clipFace = faceProperties[self.clipProperty]
+					face, clipPointCoords = self._getPointProjectionCoords([clipFace], pointCoords, projectionVector, tolerance=100)
+					
+					if clipPointCoords is not None:
+						matePoint = base.Newpoint(*matePointCoords)
+						clipPoint = base.Newpoint(*clipPointCoords)
+						measurementEntity = ansa.base.CreateMeasurement([clipPoint, matePoint], 'DISTANCE')
+						break
+
+			if measurementEntity is None:
+				measurementEntity = ansa.base.CreateMeasurement(selectedFaces, 'DISTANCE_GEOMETRY')
+		
+		else:
+			measurementEntity = ansa.base.CreateMeasurement(selectedFaces, 'DISTANCE_GEOMETRY')
+			
 		distance = round(getEntityProperty(measurementEntity, 'RESULT'), 2)
 
 # TODO: this should be solved some other way!! :(
