@@ -218,7 +218,7 @@ class StandartGeomType(metaclass=GeomTypeMetaClass):
 		else:
 		#if projectedPointCoords is None:
 			#showMessage("Projection to given faces not found within given tolerance of %s mm! Please select the %s manually." % (tolerance, searchedFaceName))
-			print("Projection to given faces not found within given tolerance of %s mm! Please select the %s manually." % (tolerance, searchedFaceName))
+			#print("Projection to given faces not found within given tolerance of %s mm! Please select the %s manually." % (tolerance, searchedFaceName))
 			#face = set(base.PickEntities(constants.ABAQUS, "FACE"))
 			#projectedPointCoords =ansa.base.ProjectPointDirectional(
 			#	face, pointCoords[0], pointCoords[1], pointCoords[2],
@@ -346,7 +346,8 @@ class StandartGeomType(metaclass=GeomTypeMetaClass):
 			searchOnFaces, self.centerCoordPointCoords, self.sideProjectionVectorPlus, searchedFaceName='x upper face - clip side')
 		# move a point lower
 		if sidePlusPointCoords is not None:
-			self.sidePlusPointCoords = sidePlusPointCoords + 1*np.array(self.smallFaceNormal)
+			sideFaceTangent = np.cross(self.largeFaceNormal, base.GetFaceOrientation(self.sideFacePlus))
+			self.sidePlusPointCoords = sidePlusPointCoords + 1*sideFaceTangent#+ 1*np.array(self.smallFaceNormal)
 			self.sideFacePlusPoint = base.Newpoint(*self.sidePlusPointCoords)
 		
 		searchOnFaces.remove(self.sideFacePlus)
@@ -355,7 +356,8 @@ class StandartGeomType(metaclass=GeomTypeMetaClass):
 			searchOnFaces, self.centerCoordPointCoords, self.sideProjectionVectorMinus, searchedFaceName='x lower face - clip side')
 		# move a point lower
 		if sideMinusPointCoords is not None:
-			self.sideMinusPointCoords = sideMinusPointCoords + 1*np.array(self.smallFaceNormal)
+			sideFaceTangent = np.cross(base.GetFaceOrientation(self.sideFaceMinus), self.largeFaceNormal)
+			self.sideMinusPointCoords = sideMinusPointCoords + 1*sideFaceTangent#+ 1*np.array(self.smallFaceNormal)
 			self.sideFaceMinusPoint = base.Newpoint(*self.sideMinusPointCoords)
 		
 		# this is correct orthogonal vector that a small face should have in case of 90 degrees...
@@ -518,36 +520,39 @@ class StandartGeomType(metaclass=GeomTypeMetaClass):
 			self.showMeasurements()
 			raise(SmartClipException('Please select just two faces.'))
 			
+		# find selected clip face and its mate
+		mateProperty = None
+		faceProperties = dict()
+		for face in selectedFaces:
+			faceProperty = base.GetEntity(constants.NASTRAN, 'PSHELL', getEntityProperty(face, 'PID'))
+			faceProperties[faceProperty] = face
+			if faceProperty != self.clipProperty:
+				mateProperty = faceProperty
+				
+		if mateProperty is None:
+			self.showMeasurements()
+			raise(SmartClipException('Selected faces must have different property!'))
+		
+		clipFace = faceProperties[self.clipProperty]
+		mateFace = faceProperties[mateProperty]
 		
 		if alterName is not None:
 			stopDistName = alterName
 		
 		stopDistanceDirections = {
-			#'zUp' : self.oppositeProjectionVector,
-			#'zLow' : self.largeFaceNormal,
+			'zUp' : self.oppositeProjectionVector,
+			'zLow' : self.largeFaceNormal,
 			'xUp' :  self.sideProjectionVectorPlus,
-			'xLow' :  self.sideProjectionVectorMinus
+			'xLow' :  self.sideProjectionVectorMinus,
+			'yUp' : self.smallFaceOrthoVector,
+			'yLow' : -1*self.smallFaceOrthoVector
 			}
-		# apply non-normal face measurement
-		if stopDistName in stopDistanceDirections:
 		
+		projectionVector = stopDistanceDirections[stopDistName]
+		
+		# apply non-normal face measurement
+		if stopDistName in ['xUp', 'xLow']:			
 			# find points and their distance
-			mateProperty = None
-			faceProperties = dict()
-			for face in selectedFaces:
-				faceProperty = base.GetEntity(constants.NASTRAN, 'PSHELL', getEntityProperty(face, 'PID'))
-				faceProperties[faceProperty] = face
-				if faceProperty != self.clipProperty:
-					mateProperty = faceProperty
-			
-			if mateProperty is None:
-				self.showMeasurements()
-				raise(SmartClipException('Selected faces must have different property!'))
-				
-			
-			mateFace = faceProperties[mateProperty]
-			projectionVector = stopDistanceDirections[stopDistName]
-			
 			measurementEntity = None
 			# move the middle point until the projection is found
 			for inc in range(-20, 20):
@@ -555,7 +560,6 @@ class StandartGeomType(metaclass=GeomTypeMetaClass):
 				face, matePointCoords = self._getPointProjectionCoords([mateFace], pointCoords, projectionVector, tolerance=100)
 				
 				if matePointCoords is not None:
-					clipFace = faceProperties[self.clipProperty]
 					face, clipPointCoords = self._getPointProjectionCoords([clipFace], pointCoords, projectionVector, tolerance=100)
 					
 					if clipPointCoords is not None:
@@ -568,7 +572,34 @@ class StandartGeomType(metaclass=GeomTypeMetaClass):
 				measurementEntity = ansa.base.CreateMeasurement(selectedFaces, 'DISTANCE_GEOMETRY')
 		
 		else:
-			measurementEntity = ansa.base.CreateMeasurement(selectedFaces, 'DISTANCE_GEOMETRY')
+			baseMeasurementEntity = ansa.base.CreateMeasurement(selectedFaces, 'DISTANCE_GEOMETRY')
+			
+			try:
+				# find the point that belongs to the clip plane
+				firstPointCoordsDict = base.GetEntityCardValues(constants.ABAQUS, baseMeasurementEntity, ['POINT1_X', 'POINT1_Y', 'POINT1_Z'])
+				firstPointCoords = [firstPointCoordsDict[k] for k in ['POINT1_X', 'POINT1_Y', 'POINT1_Z']]
+				secondPointCoordsDict = base.GetEntityCardValues(constants.ABAQUS, baseMeasurementEntity, ['POINT2_X', 'POINT2_Y', 'POINT2_Z'])
+				secondPointCoords = [secondPointCoordsDict[k] for k in ['POINT2_X', 'POINT2_Y', 'POINT2_Z']]
+				
+				def getPointDistance(pointCoords):
+					face, clipPointCoords = self._getPointProjectionCoords([clipFace], pointCoords, projectionVector)
+					distance = np.linalg.norm(np.array(pointCoords) - np.array(clipPointCoords))
+					return distance
+				
+				distances = sortEntities([
+					firstPointCoords, secondPointCoords], getPointDistance)
+				matePoint = base.Newpoint(*distances[-1])
+				
+				face, clipPointCoords = self._getPointProjectionCoords([clipFace], distances[-1], projectionVector)
+				clipPoint = base.Newpoint(*clipPointCoords)
+				
+				# delete base measurement and create local - orthogonal between two new points
+				measurementEntity = ansa.base.CreateMeasurement([clipPoint, matePoint], 'DISTANCE')
+				base.DeleteEntity(baseMeasurementEntity, force=True)
+			except Exception as e:
+				print(str(e))
+				measurementEntity = ansa.base.CreateMeasurement(selectedFaces, 'DISTANCE_GEOMETRY')
+			
 			
 		distance = round(getEntityProperty(measurementEntity, 'RESULT'), 2)
 
