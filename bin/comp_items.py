@@ -400,14 +400,7 @@ class StandartGeomType(metaclass=GeomTypeMetaClass):
 				stopDistanceMethod()
 			except Exception as e:
 				continue
-			
-		#self.findZlowDist()
-		#self.findZupDist()
-		#self.findXupDist()
-		#self.findXlowDist()
-		#self.findYupDist()
-		#self.findYlowDist()
-		
+					
 		status = base.And(ent, constants.ABAQUS)
 		
 		if hideMeasurements:
@@ -770,6 +763,7 @@ class ReversedGeomType(StandartGeomType):
 		self.largeFaceNormal = base.GetFaceOrientation(self.largeFace)
 		
 		self.sideProjectionVectorPlus = np.cross(self.smallFaceNormal, self.largeFaceNormal)
+		self.sideProjectionVectorMinus = np.cross(self.largeFaceNormal, self.smallFaceNormal)
 		self.oppositeProjectionVector = self.largeFaceNormal
 		
 		# find opposite point
@@ -802,12 +796,14 @@ class ReversedGeomType(StandartGeomType):
 		# move a point lower
 		sideBasePointCoords = sideBasePointCoords + 1*np.array(self.smallFaceNormal)
 		
+		sideBasePointCoords = sideBasePointCoords + 10*self.sideProjectionVectorMinus
 		self.sideFacePlus, self.sidePlusPointCoords = self._getPointProjectionCoords(
 			searchOnFaces, sideBasePointCoords, self.sideProjectionVectorPlus, searchedFaceName='x upper face - clip side', minDist=False)
 		self.sideFacePlusPoint = base.Newpoint(*self.sidePlusPointCoords)
 		
 		searchOnFaces.remove(self.sideFacePlus)
-		self.sideProjectionVectorMinus = np.cross(self.largeFaceNormal, self.smallFaceNormal)
+		
+		sideBasePointCoords = sideBasePointCoords + 10*self.sideProjectionVectorPlus
 		self.sideFaceMinus, self.sideMinusPointCoords = self._getPointProjectionCoords(
 			searchOnFaces, sideBasePointCoords, self.sideProjectionVectorMinus, searchedFaceName='x lower face - clip side', minDist=False)
 		self.sideFaceMinusPoint = base.Newpoint(*self.sideMinusPointCoords)
@@ -818,6 +814,7 @@ class ReversedGeomType(StandartGeomType):
 		# find front and opposite points not in the middle of the clip but on the one side		
 # TODO: find really the nearest point on geometry !!	
 		oppositeFrontBasePointCoords = self.sidePlusPointCoords + 1*self.sideProjectionVectorMinus
+		#base.Newpoint(*oppositeFrontBasePointCoords)
 		#raise SmartClipException('stop')
 		
 		searchOnFaces = self.clipFaces[:]
@@ -836,7 +833,29 @@ class ReversedGeomType(StandartGeomType):
 		# fix normal direction for clip orientation
 		self.largeFaceNormal = -1*np.array(self.largeFaceNormal)
 		self.smallFaceOrthoVector = -1*self.smallFaceOrthoVector
-	
+		
+	#-------------------------------------------------------------------------
+
+	def findXlowDist(self):
+		# find side plus projection mate
+		self.sidePlusNeighbourFace, self.sidePlusNeighbourFacePointCoords = self._getPointProjectionCoords(
+			self.neighbourFaces, self.sidePlusPointCoords, self.sideProjectionVectorPlus, searchedFaceName='x lower face - clip contra side')
+		self.sidePlusNeighbourFacePoint = base.Newpoint(*self.sidePlusNeighbourFacePointCoords)
+		self.xLow = -1*self._getStopDistance(self.sideFacePlusPoint, self.sidePlusNeighbourFacePoint, 'xLow')
+		
+		self.stopDistanceFaceCouples['xLow'] = [self.sideFacePlus, self.sidePlusNeighbourFace]
+		
+	#-------------------------------------------------------------------------
+
+	def findXupDist(self):
+		# find side minus projection mate
+		self.sideMinusNeighbourFace, self.sideMinusNeighbourFacePointCoords = self._getPointProjectionCoords(
+			self.neighbourFaces, self.sideMinusPointCoords, self.sideProjectionVectorMinus, searchedFaceName='x upper face - clip contra side')
+		self.sideMinusNeighbourFacePoint = base.Newpoint(*self.sideMinusNeighbourFacePointCoords)
+		self.xUp = self._getStopDistance(self.sideFaceMinusPoint, self.sideMinusNeighbourFacePoint, 'xUp')
+		
+		self.stopDistanceFaceCouples['xUp'] = [self.sideFaceMinus, self.sideMinusNeighbourFace]
+		
 	#-------------------------------------------------------------------------
     
 	def createCoorSystem(self):
