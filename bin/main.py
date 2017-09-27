@@ -20,7 +20,7 @@ try:
 	
 except ImportError as e:
 	# installed default version
-	PATH_BIN = '/data/fem/users/siegl/tools/python/ansaTools/smartClip/default/bin'
+	PATH_BIN = '/data/fem/+software/SKRIPTY/tools/python/ansaTools/smartClip/default/bin'
 	
 	ansa.ImportCode(os.path.join(PATH_BIN, 'util.py'))
 	ansa.ImportCode(os.path.join(PATH_BIN, 'comp_items.py'))

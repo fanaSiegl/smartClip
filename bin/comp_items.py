@@ -189,7 +189,7 @@ class StandartGeomType(metaclass=GeomTypeMetaClass):
 			    
     #-------------------------------------------------------------------------
     
-	def _getPointProjectionCoords(self, faces, pointCoords, vector, tolerance=50, searchedFaceName='face', minDist=True):
+	def _getPointProjectionCoords(self, faces, pointCoords, vector, tolerance=50, searchedFaceName='face', minDist=True, recSearch=False):
 		    	
     	# check for point projection on opposite face
 		foundProjection = list()
@@ -223,9 +223,20 @@ class StandartGeomType(metaclass=GeomTypeMetaClass):
 			#projectedPointCoords =ansa.base.ProjectPointDirectional(
 			#	face, pointCoords[0], pointCoords[1], pointCoords[2],
 			#	vector[0], vector[1], vector[2], tolerance, project_on="faces")
-		
-			face = None
-			projectedPointCoords = None
+			
+			# recursive search for projection
+			if recSearch:
+				recSearchRange = recSearch[0]
+				recSearchVector = recSearch[1]
+				for inc in recSearchRange:
+					pointCoords = pointCoords + 0.5*float(inc)*np.array(recSearchVector)
+					face, projectedPointCoords = self._getPointProjectionCoords(faces, pointCoords, vector, tolerance=100)
+					
+					if projectedPointCoords is not None:
+						break
+			else:
+				face = None
+				projectedPointCoords = None
 		
 		return face, projectedPointCoords
 
@@ -766,13 +777,16 @@ class ReversedGeomType(StandartGeomType):
 		self.largeFaceOrthoVector = np.cross(self.sideProjectionVectorPlus, self.largeFaceNormal)
 		self.oppositeFacePointCoords = self.middlePointCoords +1*np.array(self.largeFaceOrthoVector)
 		#self.oppositeFacePoint = base.Newpoint(*self.oppositeFacePointCoords)
-		
+
 		# front face point
 		searchOnFaces = self.clipFaces[:]
 		self.frontFaceProjectionVector = -1*np.array(self.largeFaceNormal)
 		self.frontFace, self.frontFacePointCoords = self._getPointProjectionCoords(
-			searchOnFaces, self.oppositeFacePointCoords, self.frontFaceProjectionVector, searchedFaceName='z upper face - clip side')
+			searchOnFaces, self.oppositeFacePointCoords, self.frontFaceProjectionVector, searchedFaceName='z upper face - clip side',
+			recSearch=[range(50), self.largeFaceOrthoVector])
 		#self.frontFacePoint = base.Newpoint(*self.frontFacePointCoords)
+		#raise SmartClipException('stop')
+		
 		# projection to the small face
 		face, self.topPointCoords =  self._getPointProjectionCoords(
 			[self.smallFace], self.frontFacePointCoords, -1*self.largeFaceOrthoVector)
@@ -785,19 +799,17 @@ class ReversedGeomType(StandartGeomType):
 		
 		# find side faces
 		sideBasePointCoords = self.oppositeFacePointCoords + 0.5*self.frontFaceProjectionVector
-		
-		self.sideFacePlus, sidePlusPointCoords = self._getPointProjectionCoords(
-			searchOnFaces, sideBasePointCoords, self.sideProjectionVectorPlus, searchedFaceName='x upper face - clip side', minDist=False)
 		# move a point lower
-		self.sidePlusPointCoords = sidePlusPointCoords + 1*np.array(self.smallFaceNormal)
+		sideBasePointCoords = sideBasePointCoords + 1*np.array(self.smallFaceNormal)
+		
+		self.sideFacePlus, self.sidePlusPointCoords = self._getPointProjectionCoords(
+			searchOnFaces, sideBasePointCoords, self.sideProjectionVectorPlus, searchedFaceName='x upper face - clip side', minDist=False)
 		self.sideFacePlusPoint = base.Newpoint(*self.sidePlusPointCoords)
 		
 		searchOnFaces.remove(self.sideFacePlus)
 		self.sideProjectionVectorMinus = np.cross(self.largeFaceNormal, self.smallFaceNormal)
-		self.sideFaceMinus, sideMinusPointCoords = self._getPointProjectionCoords(
+		self.sideFaceMinus, self.sideMinusPointCoords = self._getPointProjectionCoords(
 			searchOnFaces, sideBasePointCoords, self.sideProjectionVectorMinus, searchedFaceName='x lower face - clip side', minDist=False)
-		# move a point lower
-		self.sideMinusPointCoords = sideMinusPointCoords + 1*np.array(self.smallFaceNormal)
 		self.sideFaceMinusPoint = base.Newpoint(*self.sideMinusPointCoords)
 		
 		# this is correct orthogonal vector that a small face should have in case of 90 degrees...
@@ -805,7 +817,9 @@ class ReversedGeomType(StandartGeomType):
 
 		# find front and opposite points not in the middle of the clip but on the one side		
 # TODO: find really the nearest point on geometry !!	
-		oppositeFrontBasePointCoords = self.sidePlusPointCoords - 1*self.sideProjectionVectorMinus
+		oppositeFrontBasePointCoords = self.sidePlusPointCoords + 1*self.sideProjectionVectorMinus
+		#raise SmartClipException('stop')
+		
 		searchOnFaces = self.clipFaces[:]
 		frontFace, self.frontFacePointCoords = self._getPointProjectionCoords(
 			searchOnFaces, oppositeFrontBasePointCoords, self.frontFaceProjectionVector, searchedFaceName='z upper face - clip side')
@@ -1112,6 +1126,8 @@ class AudiBeamType(metaclass=BeamTypeMetaClass):
 			self.beamsCcs.append(beam)
 		
 		self.clipEntities.extend(self.beamsCcs)
+		
+		base.RedrawAll()
 			
 	#-------------------------------------------------------------------------
     
@@ -1213,6 +1229,8 @@ class AudiBeamType(metaclass=BeamTypeMetaClass):
 			self.beamsCs.append(beam)
 		
 		self.clipEntities.extend(self.beamsCs)
+		
+		base.RedrawAll()
 		
 
 # ==============================================================================
