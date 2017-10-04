@@ -48,6 +48,12 @@ class GeomTypeMetaClass(type):
         
 # ==============================================================================
 
+COLOURS = {
+	'r' :	[255, 0, 0],
+	'b' :	[0,  0, 255]}
+
+# ==============================================================================
+
 class SmartClip(object):
 	
 	coordsDrawState = None
@@ -242,7 +248,7 @@ class StandartGeomType(metaclass=GeomTypeMetaClass):
 
 	#-------------------------------------------------------------------------
 	
-	def _getStopDistance(self, clipFacePoint, mateFacePoint, measurementDescription):
+	def _getStopDistance(self, clipFacePoint, mateFacePoint, measurementDescription, colour='m'):
 
 # TODO: get rid of redundant measurement entities and use just 2 point distance
 # np.linalg.norm(np.array(clipFacePoint) - np.array(self.centerCoordNode))
@@ -271,6 +277,10 @@ class StandartGeomType(metaclass=GeomTypeMetaClass):
 		base.DeleteEntity(mNodeClipFace)
 		base.DeleteEntity(mNodeMateFace)
 		
+		# set measurement color
+		if colour in COLOURS:
+			colourRGB = COLOURS[colour]
+			base.SetEntityCardValues(constants.ABAQUS, mFace2face, {'COLOR_R' : colourRGB[0],  'COLOR_G' : colourRGB[1], 'COLOR_B' : colourRGB[2]})		
 		
 		self.stopDistanceMeasurements[measurementDescription] = mFace2face
 		
@@ -335,12 +345,11 @@ class StandartGeomType(metaclass=GeomTypeMetaClass):
 		self.oppositeProjectionVector = -1*np.array(self.largeFaceNormal)
 		self.oppositeFace, self.oppositeFacePointCoords = self._getPointProjectionCoords(
 			clipFaces, self.middlePointCoords, self.oppositeProjectionVector, searchedFaceName='z lower face - clip side')
-		if self.oppositeFacePointCoords is not None:
-			self.oppositeFacePoint = base.Newpoint(*self.oppositeFacePointCoords)
+		self.oppositeFacePoint = createPoint(self.oppositeFacePointCoords, 'oppositeFacePoint')
 		
 		# front face point
 		self.frontFacePointCoords = self.middlePointCoords + 1*np.array(self.smallFaceNormal)
-		self.frontFacePoint = base.Newpoint(*self.frontFacePointCoords)
+		self.frontFacePoint = createPoint(self.frontFacePointCoords, 'frontFacePoint')
 		
 		self.clipFaces = list(sortEntities(list(clipFaces), base.GetFaceArea))
 		self.oppositeFacePointCoords =  self.oppositeFacePointCoords
@@ -350,26 +359,23 @@ class StandartGeomType(metaclass=GeomTypeMetaClass):
 		self.centerCoordNode = createNode(self.centerCoordPointCoords)
 		#base.Newpoint(*self.centerCoordPointCoords)
 		
-		# find side faces		
+		# find side faces
 		searchOnFaces = self.clipFaces[:]
 		self.sideProjectionVectorPlus = np.cross(self.smallFaceNormal, self.oppositeProjectionVector)
-		self.sideFacePlus, sidePlusPointCoords = self._getPointProjectionCoords(
-			searchOnFaces, self.centerCoordPointCoords, self.sideProjectionVectorPlus, searchedFaceName='x upper face - clip side')
+		self.sideProjectionVectorMinus = np.cross(self.oppositeProjectionVector, self.smallFaceNormal)
 		# move a point lower
-		if sidePlusPointCoords is not None:
-			sideFaceTangent = np.cross(self.largeFaceNormal, base.GetFaceOrientation(self.sideFacePlus))
-			self.sidePlusPointCoords = sidePlusPointCoords + 1*sideFaceTangent#+ 1*np.array(self.smallFaceNormal)
-			self.sideFacePlusPoint = base.Newpoint(*self.sidePlusPointCoords)
+		loweredCenterPointCoords = self.centerCoordPointCoords + 1*np.array(self.smallFaceNormal)
+		
+		sideBasePointCoords = loweredCenterPointCoords + 10*self.sideProjectionVectorMinus
+		self.sideFacePlus, self.sidePlusPointCoords = self._getPointProjectionCoords(
+			searchOnFaces, sideBasePointCoords, self.sideProjectionVectorPlus, searchedFaceName='x upper face - clip side')
+		self.sideFacePlusPoint = createPoint(self.sidePlusPointCoords, 'sideFacePlusPoint')
 		
 		searchOnFaces.remove(self.sideFacePlus)
-		self.sideProjectionVectorMinus = np.cross(self.oppositeProjectionVector, self.smallFaceNormal)
-		self.sideFaceMinus, sideMinusPointCoords = self._getPointProjectionCoords(
-			searchOnFaces, self.centerCoordPointCoords, self.sideProjectionVectorMinus, searchedFaceName='x lower face - clip side')
-		# move a point lower
-		if sideMinusPointCoords is not None:
-			sideFaceTangent = np.cross(base.GetFaceOrientation(self.sideFaceMinus), self.largeFaceNormal)
-			self.sideMinusPointCoords = sideMinusPointCoords + 1*sideFaceTangent#+ 1*np.array(self.smallFaceNormal)
-			self.sideFaceMinusPoint = base.Newpoint(*self.sideMinusPointCoords)
+		sideBasePointCoords = loweredCenterPointCoords + 10*self.sideProjectionVectorPlus
+		self.sideFaceMinus, self.sideMinusPointCoords = self._getPointProjectionCoords(
+			searchOnFaces, sideBasePointCoords, self.sideProjectionVectorMinus, searchedFaceName='x lower face - clip side')
+		self.sideFaceMinusPoint = createPoint(self.sideMinusPointCoords, 'sideFaceMinusPoint')
 		
 		# this is correct orthogonal vector that a small face should have in case of 90 degrees...
 		self.smallFaceOrthoVector = np.cross(self.largeFaceNormal, self.sideProjectionVectorMinus)
@@ -413,7 +419,7 @@ class StandartGeomType(metaclass=GeomTypeMetaClass):
 		self.oppositeNeighbourFace, self.oppositeNeighbourFacePointCoords = self._getPointProjectionCoords(
 			self.neighbourFaces, self.oppositeFacePointCoords, self.oppositeProjectionVector, searchedFaceName='z upper face - clip contra side')
 		self.oppositeNeighbourFacePoint = base.Newpoint(*self.oppositeNeighbourFacePointCoords)
-		self.zUp = self.CONNECTOR_LENGTH + self._getStopDistance(self.oppositeFacePoint, self.oppositeNeighbourFacePoint, 'zUp')
+		self.zUp = self.CONNECTOR_LENGTH + self._getStopDistance(self.oppositeFacePoint, self.oppositeNeighbourFacePoint, 'zUp' , colour='r')
 		
 		self.stopDistanceFaceCouples['zUp'] = [self.oppositeFace, self.oppositeNeighbourFace]
 		
@@ -424,7 +430,7 @@ class StandartGeomType(metaclass=GeomTypeMetaClass):
 		self.frontNeighbourFace, self.frontNeighbourFacePointCoords = self._getPointProjectionCoords(
 			self.neighbourFaces, self.frontFacePointCoords, self.largeFaceNormal, searchedFaceName='z lower face - clip contra side')
 		self.frontNeighbourFacePoint = base.Newpoint(*self.frontNeighbourFacePointCoords)
-		self.zLow = self.CONNECTOR_LENGTH - 1*self._getStopDistance(self.frontFacePoint, self.frontNeighbourFacePoint, 'zLow')
+		self.zLow = self.CONNECTOR_LENGTH - 1*self._getStopDistance(self.frontFacePoint, self.frontNeighbourFacePoint, 'zLow', colour='b')
 		
 		self.stopDistanceFaceCouples['zLow'] = [self.largeFace, self.frontNeighbourFace]
 		
@@ -435,7 +441,7 @@ class StandartGeomType(metaclass=GeomTypeMetaClass):
 		self.sidePlusNeighbourFace, self.sidePlusNeighbourFacePointCoords = self._getPointProjectionCoords(
 			self.neighbourFaces, self.sidePlusPointCoords, self.sideProjectionVectorPlus, searchedFaceName='x upper face - clip contra side')
 		self.sidePlusNeighbourFacePoint = base.Newpoint(*self.sidePlusNeighbourFacePointCoords)
-		self.xUp = self._getStopDistance(self.sideFacePlusPoint, self.sidePlusNeighbourFacePoint, 'xUp')
+		self.xUp = self._getStopDistance(self.sideFacePlusPoint, self.sidePlusNeighbourFacePoint, 'xUp', colour='r')
 		
 		self.stopDistanceFaceCouples['xUp'] = [self.sideFacePlus, self.sidePlusNeighbourFace]
 		
@@ -446,7 +452,7 @@ class StandartGeomType(metaclass=GeomTypeMetaClass):
 		self.sideMinusNeighbourFace, self.sideMinusNeighbourFacePointCoords = self._getPointProjectionCoords(
 			self.neighbourFaces, self.sideMinusPointCoords, self.sideProjectionVectorMinus, searchedFaceName='x lower face - clip contra side')
 		self.sideMinusNeighbourFacePoint = base.Newpoint(*self.sideMinusNeighbourFacePointCoords)
-		self.xLow = -1*self._getStopDistance(self.sideFaceMinusPoint, self.sideMinusNeighbourFacePoint, 'xLow')
+		self.xLow = -1*self._getStopDistance(self.sideFaceMinusPoint, self.sideMinusNeighbourFacePoint, 'xLow', colour='b')
 		
 		self.stopDistanceFaceCouples['xLow'] = [self.sideFaceMinus, self.sideMinusNeighbourFace]
 
@@ -490,7 +496,7 @@ class StandartGeomType(metaclass=GeomTypeMetaClass):
 		self.topPoint = base.Newpoint(*self.topPointCoords)
 		
 		# 4. this should be the smallest distance in Y direction
-		self.yUp = self._getStopDistance(self.topPoint, self.topNeighbourFacePoint, 'yUp')
+		self.yUp = self._getStopDistance(self.topPoint, self.topNeighbourFacePoint, 'yUp', colour='r')
 		
 		self.stopDistanceFaceCouples['yUp'] = [self.smallFace, self.topNeighbourFace]
 		
@@ -499,6 +505,14 @@ class StandartGeomType(metaclass=GeomTypeMetaClass):
 	def findYlowDist(self):
 		self.yLow = -1000
 	
+	#-------------------------------------------------------------------------
+
+	def editStopDistance(self, stopDistName, value):
+		
+		setattr(self, stopDistName, value)
+		
+		print('Seting %s = %s' % (stopDistName, value))
+		
 	#-------------------------------------------------------------------------
 
 	def redefineStopDistance(self, stopDistName, alterName=None):
@@ -743,7 +757,7 @@ class ReversedGeomType(StandartGeomType):
 		
 		# find all faces on clip
 		cons = [oppositeCon]
-		for i in range(8):
+		for i in range(9):
 			clipFaces = set(ansa.base.GetFacesOfCons(cons))
 			clipFaces.discard(self.smallFace)
 			clipFaces.discard(self.largeFace)
@@ -799,14 +813,14 @@ class ReversedGeomType(StandartGeomType):
 		sideBasePointCoords = sideBasePointCoords + 10*self.sideProjectionVectorMinus
 		self.sideFacePlus, self.sidePlusPointCoords = self._getPointProjectionCoords(
 			searchOnFaces, sideBasePointCoords, self.sideProjectionVectorPlus, searchedFaceName='x upper face - clip side', minDist=False)
-		self.sideFacePlusPoint = base.Newpoint(*self.sidePlusPointCoords)
+		self.sideFacePlusPoint = createPoint(self.sidePlusPointCoords, 'sideFacePlusPoint')
 		
 		searchOnFaces.remove(self.sideFacePlus)
 		
 		sideBasePointCoords = sideBasePointCoords + 10*self.sideProjectionVectorPlus
 		self.sideFaceMinus, self.sideMinusPointCoords = self._getPointProjectionCoords(
 			searchOnFaces, sideBasePointCoords, self.sideProjectionVectorMinus, searchedFaceName='x lower face - clip side', minDist=False)
-		self.sideFaceMinusPoint = base.Newpoint(*self.sideMinusPointCoords)
+		self.sideFaceMinusPoint = createPoint(self.sideMinusPointCoords, 'sideFaceMinusPoint')
 		
 		# this is correct orthogonal vector that a small face should have in case of 90 degrees...
 		self.smallFaceOrthoVector = np.cross(self.largeFaceNormal, self.sideProjectionVectorMinus)
@@ -814,19 +828,20 @@ class ReversedGeomType(StandartGeomType):
 		# find front and opposite points not in the middle of the clip but on the one side		
 # TODO: find really the nearest point on geometry !!	
 		oppositeFrontBasePointCoords = self.sidePlusPointCoords + 1*self.sideProjectionVectorMinus
-		#base.Newpoint(*oppositeFrontBasePointCoords)
+		
+		#createPoint(oppositeFrontBasePointCoords, 'checkPoint')
 		#raise SmartClipException('stop')
 		
 		searchOnFaces = self.clipFaces[:]
 		frontFace, self.frontFacePointCoords = self._getPointProjectionCoords(
 			searchOnFaces, oppositeFrontBasePointCoords, self.frontFaceProjectionVector, searchedFaceName='z upper face - clip side')
-		self.frontFacePoint = base.Newpoint(*self.frontFacePointCoords)
+		self.frontFacePoint =createPoint(self.frontFacePointCoords, 'frontFacePoint')
 
 		searchOnFaces = self.clipFaces[:]
 		searchOnFaces.append(self.largeFace)
 		oppositeFace, self.oppositeFacePointCoords = self._getPointProjectionCoords(
 			searchOnFaces, oppositeFrontBasePointCoords, self.oppositeProjectionVector, searchedFaceName='z lower face - clip side')
-		self.oppositeFacePoint = base.Newpoint(*self.oppositeFacePointCoords)
+		self.oppositeFacePoint = createPoint(self.oppositeFacePointCoords, 'oppositeFacePoint')
 		
 		#base.PickEntities(constants.ABAQUS, "FACE",  initial_entities = clipFaces)
 		
@@ -841,7 +856,7 @@ class ReversedGeomType(StandartGeomType):
 		self.sidePlusNeighbourFace, self.sidePlusNeighbourFacePointCoords = self._getPointProjectionCoords(
 			self.neighbourFaces, self.sidePlusPointCoords, self.sideProjectionVectorPlus, searchedFaceName='x lower face - clip contra side')
 		self.sidePlusNeighbourFacePoint = base.Newpoint(*self.sidePlusNeighbourFacePointCoords)
-		self.xLow = -1*self._getStopDistance(self.sideFacePlusPoint, self.sidePlusNeighbourFacePoint, 'xLow')
+		self.xLow = -1*self._getStopDistance(self.sideFacePlusPoint, self.sidePlusNeighbourFacePoint, 'xLow', colour='b')
 		
 		self.stopDistanceFaceCouples['xLow'] = [self.sideFacePlus, self.sidePlusNeighbourFace]
 		
@@ -852,7 +867,7 @@ class ReversedGeomType(StandartGeomType):
 		self.sideMinusNeighbourFace, self.sideMinusNeighbourFacePointCoords = self._getPointProjectionCoords(
 			self.neighbourFaces, self.sideMinusPointCoords, self.sideProjectionVectorMinus, searchedFaceName='x upper face - clip contra side')
 		self.sideMinusNeighbourFacePoint = base.Newpoint(*self.sideMinusNeighbourFacePointCoords)
-		self.xUp = self._getStopDistance(self.sideFaceMinusPoint, self.sideMinusNeighbourFacePoint, 'xUp')
+		self.xUp = self._getStopDistance(self.sideFaceMinusPoint, self.sideMinusNeighbourFacePoint, 'xUp', colour='r')
 		
 		self.stopDistanceFaceCouples['xUp'] = [self.sideFaceMinus, self.sideMinusNeighbourFace]
 		
@@ -1531,7 +1546,19 @@ class SymmetricalClip(object):
 		# autopaste
 		ansa.mesh.AutoPaste(visible = True, project_on_geometry=False, project_2nd_order_nodes=False, move_to="FE pos", distance=self.PASTE_TOLERANCE, preserve_id = 'min')
 		
-		
+
+# ==============================================================================
+
+def createPoint(pointCoords, name=''):
+	
+	try:
+		newPointEntity = base.Newpoint(*pointCoords)
+		base.SetEntityCardValues(constants.ABAQUS, newPointEntity, {'Name': name})
+	except Exception as e:
+		raise SmartClipException(str(e))
+	
+	return newPointEntity
+			
 # ==============================================================================
 
 def createNode(nodeCoords):

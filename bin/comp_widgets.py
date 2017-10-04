@@ -147,11 +147,14 @@ class StackWidgetPage(object):
     
     #-------------------------------------------------------------------------
 
-	def _setInfoAttributeValue(self, valueAttrName, value):
+	def _setInfoAttributeValue(self, valueAttrName, value, style=False):
 
 		valueWidget = getattr(self, valueAttrName)
-
-		guitk.BCLabelSetText(valueWidget, '%s' % value)
+		
+		if style:
+			guitk.BCLabelSetText(valueWidget, style % value)
+		else:
+			guitk.BCLabelSetText(valueWidget, '%s' % value)
 	
 	#-------------------------------------------------------------------------
 
@@ -186,7 +189,13 @@ class SelectConPage(StackWidgetPage):
 				lambda buttonWidget, stopDistanceName: self.redefineStopDistance(button, stopDistanceName),
 			stopDistanceName)
 			
+			editButton = guitk.BCPushButtonCreate(self.contentLayout, "Edit",
+				#lambda buttonWidget, stopDistanceName: self.smartClip().redefineStopDistance(stopDistanceName),
+				lambda buttonWidget, stopDistanceName: self.editStopDistance(button, stopDistanceName),
+			stopDistanceName)
+			
 			guitk.BCGridLayoutAddWidget(self.contentLayout, button, 2+i, 2, guitk.constants.BCAlignLeft)
+			guitk.BCGridLayoutAddWidget(self.contentLayout, editButton, 2+i, 3, guitk.constants.BCAlignLeft)
 	
 	#-------------------------------------------------------------------------
     
@@ -194,6 +203,25 @@ class SelectConPage(StackWidgetPage):
 		
 		try:
 			self.smartClip().redefineStopDistance(stopDistanceName)
+		except Exception as e:
+			self.parent._showStatusBarMessage(str(e))
+		
+		self.updateInfo()
+		
+	#-------------------------------------------------------------------------
+    
+	def editStopDistance(self, buttonWidget, stopDistanceName):
+		
+		try:
+			initialValue = getattr(self.smartClip().geomType(), stopDistanceName)
+			
+			value = float(guitk.UserInput('Enter %s value:' % stopDistanceName, str(initialValue)))
+		except Exception as e:
+			self.parent._showStatusBarMessage(str(e))
+			return
+		
+		try:
+			self.smartClip().editStopDistance(stopDistanceName, value)
 		except Exception as e:
 			self.parent._showStatusBarMessage(str(e))
 		
@@ -212,12 +240,12 @@ class SelectConPage(StackWidgetPage):
 	def updateInfo(self):
 		
 		self._setInfoAttributeValue('selectedCONid', 'ID %s' % self.smartClip().geomType().selectedCon._id)
-		self._setInfoAttributeValue('xLow', self.smartClip().geomType().xLow)
-		self._setInfoAttributeValue('xUp', self.smartClip().geomType().xUp)
-		self._setInfoAttributeValue('yLow', self.smartClip().geomType().yLow)
-		self._setInfoAttributeValue('yUp', self.smartClip().geomType().yUp)
-		self._setInfoAttributeValue('zLow', self.smartClip().geomType().zLow)
-		self._setInfoAttributeValue('zUp', self.smartClip().geomType().zUp)
+		self._setInfoAttributeValue('xLow', self.smartClip().geomType().xLow, style='<p style="color:blue">%s</p>')
+		self._setInfoAttributeValue('xUp', self.smartClip().geomType().xUp, style='<p style="color:red">%s</p>')
+		self._setInfoAttributeValue('yLow', self.smartClip().geomType().yLow, style='<p style="color:blue">%s</p>')
+		self._setInfoAttributeValue('yUp', self.smartClip().geomType().yUp, style='<p style="color:red">%s</p>')
+		self._setInfoAttributeValue('zLow', self.smartClip().geomType().zLow, style='<p style="color:blue">%s</p>')
+		self._setInfoAttributeValue('zUp', self.smartClip().geomType().zUp, style='<p style="color:red">%s</p>')
 		
 		#yLow
 

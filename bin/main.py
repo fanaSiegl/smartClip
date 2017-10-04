@@ -92,12 +92,14 @@ class SmartClipDialog(object):
 			if self.smartClip.geomType().selectedCon is None:
 				try:
 					self.smartClip.geomType().setBaseFaces()
+					
+					guitk.BCSetApplicationOverrideCursor(guitk.constants.BCCursorWait)
 					#self.smartClip.createNodesForConnector()
 					self.smartClip.geomType().setStopDistances(hideMeasurements=False)
 					self.smartClip.geomType().createCoorSystem()
 					#self.smartClip.createConnector()
 					
-					self.pageContainer.updateCurrentWidgetInfo()
+					#self.pageContainer.updateCurrentWidgetInfo()
 										
 					#self.next()
 					if not guitk.BCWizardIsNextButtonEnabled(self.mainWindow):
@@ -107,13 +109,16 @@ class SmartClipDialog(object):
 					#guitk.BCSetEnabled(self.pushButtonNext, False)
 					if guitk.BCWizardIsNextButtonEnabled(self.mainWindow):
 						guitk.BCWizardSetNextButtonEnabled(self.mainWindow, False)
+
+				self.pageContainer.updateCurrentWidgetInfo()
 				
 			else:
 				
 				if not guitk.BCWizardIsNextButtonEnabled(self.mainWindow):
 					guitk.BCWizardSetNextButtonEnabled(self.mainWindow, True)
 				#guitk.BCButtonSetText(self.pushButtonNext, 'Next >')
-				
+			guitk.BCRestoreApplicationOverrideCursor()
+		
 		elif stepId == 2:
 			
 			if not self.smartClip.beamType().beamsCsDefined:
