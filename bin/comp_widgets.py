@@ -232,7 +232,7 @@ class SelectConPage(StackWidgetPage):
 	def conSelected(self, buttonWidget=None, data=None):
 		
 		# reset selection and propt the new one
-		self.smartClip().selectedCon = None
+		self.smartClip().geomType().selectedCon = None
 		self.parent.controller(None, None, 1, None)
 	
 	#-------------------------------------------------------------------------

@@ -5,7 +5,6 @@ import sys
 import ansa
 from ansa import base, guitk, constants
 
-
 # ==============================================================================
 
 try:
@@ -17,6 +16,9 @@ try:
 	import util
 	
 	print('Runnig devel version ', __file__)
+
+	ansa.ImportCode(os.path.join(PATH_BIN, 'comp_items.py'))
+	ansa.ImportCode(os.path.join(PATH_BIN, 'comp_widgets.py'))
 	
 except ImportError as e:
 	# installed default version
@@ -29,8 +31,8 @@ except ImportError as e:
 #import imp
 #imp.reload(comp_items)
 #imp.reload(comp_widgets)
-ansa.ImportCode(os.path.join(PATH_BIN, 'comp_items.py'))
-ansa.ImportCode(os.path.join(PATH_BIN, 'comp_widgets.py'))
+#ansa.ImportCode(os.path.join(PATH_BIN, 'comp_items.py'))
+#ansa.ImportCode(os.path.join(PATH_BIN, 'comp_widgets.py'))
 #ansa.ImportCode(os.path.join(PATH_BIN, 'util.py'))
 
 from comp_items import SmartClipException
@@ -88,7 +90,6 @@ class SmartClipDialog(object):
 	def controller(self, wizard, oldIndex, stepId, data):
 		
 		if stepId == 1:
-			
 			if self.smartClip.geomType().selectedCon is None:
 				try:
 					self.smartClip.geomType().setBaseFaces()
