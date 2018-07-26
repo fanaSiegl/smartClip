@@ -19,6 +19,14 @@ try:
 	
 except ImportError as e:
 	ansa.ImportCode(os.path.join(PATH_BIN, 'util.py'))
+
+# ==============================================================================
+
+def getAnsaVersion():
+	
+	currentVersion = constants.app_version
+	parts = currentVersion.split('.')
+	return int(parts[0])
 	
 # ==============================================================================
 
@@ -296,13 +304,25 @@ class StandartGeomType(metaclass=GeomTypeMetaClass):
 		mFace2face = ansa.base.CreateMeasurement([clipFacePoint, mateFacePoint], 'DISTANCE')
 		faceDist = getEntityProperty(mFace2face, 'RESULT')
 				
-		nodeFaceClipDist = np.linalg.norm(np.array(self.centerCoordPointCoords) - np.array(getHotPointCoords(clipFacePoint)))
-		nodeFaceMateDist = np.linalg.norm(np.array(self.centerCoordPointCoords) - np.array(getHotPointCoords(mateFacePoint)))
+#		nodeFaceClipDist = np.linalg.norm(np.array(self.centerCoordPointCoords) - np.array(getHotPointCoords(clipFacePoint)))
+#		nodeFaceMateDist = np.linalg.norm(np.array(self.centerCoordPointCoords) - np.array(getHotPointCoords(mateFacePoint)))
+		
+		currentMateProjectionVector = np.array(getHotPointCoords(clipFacePoint)) - np.array(getHotPointCoords(mateFacePoint))
+		angle = ansa.calc.CalcAngleOfVectors(currentMateProjectionVector, self.oppositeProjectionVector)
+		angle = angle*180/3.14
 		
 		# check penetrations in z direction
-		if measurementDescription.startswith('z'):		
-			if nodeFaceClipDist > nodeFaceMateDist:
+		# check distance location for zUpper limit
+		penetration = ''
+		if measurementDescription == 'zUp':
+			if angle < 90:
 				print('Penetration detected! Distance set to: 0.01')
+				penetration = '_penetration_detected'
+				faceDist = 0.01
+		elif measurementDescription == 'zLow':	
+			if angle > 90:
+				print('Penetration detected! Distance set to: 0.01')
+				penetration = '_penetration_detected'
 				faceDist = 0.01
 		
 		if abs(faceDist) < 0.01:
@@ -313,7 +333,9 @@ class StandartGeomType(metaclass=GeomTypeMetaClass):
 		# set measurement color
 		if colour in COLOURS:
 			colourRGB = COLOURS[colour]
-			base.SetEntityCardValues(constants.ABAQUS, mFace2face, {'COLOR_R' : colourRGB[0],  'COLOR_G' : colourRGB[1], 'COLOR_B' : colourRGB[2]})		
+			base.SetEntityCardValues(constants.ABAQUS, mFace2face,
+				{'Name' : 'Distance_%s' % measurementDescription + penetration,
+				'COLOR_R' : colourRGB[0],  'COLOR_G' : colourRGB[1], 'COLOR_B' : colourRGB[2]})		
 		
 		self.stopDistanceMeasurements[measurementDescription] = mFace2face
 		self.stopDistPoints.extend([clipFacePoint, mateFacePoint])
@@ -1247,7 +1269,7 @@ class SkodaBeamType(AudiBeamType):
 			beamSection = base.GetEntity(constants.ABAQUS, 'BEAM_SECTION', self.CONNECTING_BEAM_SECTION_ID)
 
 			if beamSection is None:
-								
+#TODO: this parameter inconsistency is solved in ANSA V18. (TYPE -> ELASTIC_TYPE, etc.)
 				# create material for beam section
 				vals = {
 					'Name': 'CONNECTOR_BODY_STEEL_LIGHT',
@@ -1257,7 +1279,8 @@ class SkodaBeamType(AudiBeamType):
 					'Plasticity (Rate Dep.)' : 'CREEP',
 					 '*DENSITY' : 'YES',
 					 'DENS' : 7.85E-12, 
-					 '*EXPANSION' : 'YES', 'TYPE' : 'ISO',
+					 '*EXPANSION' : 'YES', 
+					 #'TYPE' : 'ISO',
 					 'a' : 1.2E-5,
 					 '*ELASTIC' : 'YES',
 					 # 'TYPE' : 'ISOTROPIC',
