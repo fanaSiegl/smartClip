@@ -7,36 +7,13 @@ from ansa import base, guitk, constants
 
 # ==============================================================================
 
-try:
-	# development version
-	PATH_BIN = os.path.dirname(__file__)
-	sys.path.append(PATH_BIN)
-	import comp_items
-	import comp_widgets
-	import util
-	
-	print('Runnig devel version ', __file__)
+PATH_SELF = os.path.dirname(os.path.realpath(__file__))
 
-	ansa.ImportCode(os.path.join(PATH_BIN, 'comp_items.py'))
-	ansa.ImportCode(os.path.join(PATH_BIN, 'comp_widgets.py'))
-	
-except ImportError as e:
-	# installed default version
-	PATH_BIN = '/data/fem/+software/SKRIPTY/tools/python/ansaTools/smartClip/default/bin'
-	
-	ansa.ImportCode(os.path.join(PATH_BIN, 'util.py'))
-	ansa.ImportCode(os.path.join(PATH_BIN, 'comp_items.py'))
-	ansa.ImportCode(os.path.join(PATH_BIN, 'comp_widgets.py'))
-
-#import imp
-#imp.reload(comp_items)
-#imp.reload(comp_widgets)
-#ansa.ImportCode(os.path.join(PATH_BIN, 'comp_items.py'))
-#ansa.ImportCode(os.path.join(PATH_BIN, 'comp_widgets.py'))
-#ansa.ImportCode(os.path.join(PATH_BIN, 'util.py'))
+ansa.ImportCode(os.path.join(PATH_SELF, 'util.py'))
+ansa.ImportCode(os.path.join(PATH_SELF, 'comp_items.py'))
+ansa.ImportCode(os.path.join(PATH_SELF, 'comp_widgets.py'))
 
 from comp_items import SmartClipException
-
 
 # ==============================================================================
 
@@ -54,9 +31,10 @@ class SmartClipDialog(object):
 		self.initialEntities = base.CollectEntities(constants.ABAQUS, None, ['SHELL', 'FACE', 'BEAM', 'CONNECTOR', 'ORIENTATION_R'], filter_visible=True )
 		self.smartClip = comp_items.SmartClip()
 		self.pageContainer = comp_widgets.PageContainer()
-
-		#self.mainWindow = guitk.BCWizardCreate("SmartClip", guitk.constants.BCOnExitHide)
-		self.mainWindow = guitk.BCWizardCreate("SmartClip", guitk.constants.BCOnExitDestroy)
+		
+		revision, modifiedBy, lastModified = util.getVersionInfo()
+		
+		self.mainWindow = guitk.BCWizardCreate("SmartClip (%s)" % revision, guitk.constants.BCOnExitDestroy)
 		guitk.BCWindowSetInitSize(self.mainWindow, self.WIDTH, self.HEIGTH)
 		guitk.BCWindowSetSaveSettings(self.mainWindow, False)
 		
@@ -65,16 +43,11 @@ class SmartClipDialog(object):
 		self.page2 = comp_widgets.SelectClipNodesPage(self, 'Select NODES', 'Select NODES for CONNECTOR on the clip')
 		self.page3 = comp_widgets.SelectClipContraNodesPage(self, 'Select NODES', 'Select NODES for CONNECTOR on the clip contra side')
 		self.page3 = comp_widgets.MirrorClipPage(self, 'Mirror clip', 'Do you want to mirror created clip?')
-		
-		#self.statusBar = guitk.BCStatusBarCreate(self.mainWindow)
-		
+				
 		guitk.BCWizardSetCurrentPageChangedFunction(self.mainWindow, self.controller, None)
 		
-#TODO: how to set this????
 		guitk.BCWindowSetAcceptFunction(self.mainWindow, newClip, self)
 			
-		guitk.BCWindowSetMousePressFunction(self.mainWindow, self.mousePressedFunc, None)
-# TODO: This shuts AMSA down.. why???!!!
 		guitk.BCWindowSetRejectFunction(self.mainWindow, _reject, self)
 		guitk.BCWindowSetSaveSettings(self.mainWindow, True)
 		guitk.BCShow(self.mainWindow)
@@ -168,20 +141,7 @@ class SmartClipDialog(object):
 				if not guitk.BCWizardIsNextButtonEnabled(self.mainWindow):
 					guitk.BCWizardSetNextButtonEnabled(self.mainWindow, True)
 				#guitk.BCButtonSetText(self.pushButtonNext, 'Finish')
-				
-	#-------------------------------------------------------------------------
-    
-	def mousePressedFunc(self, w, mb, data):
-		
-		if mb == guitk.constants.BCLeftButton:
-			print("Left mouse button pressed")
-		elif mb == guitk.constants.BCMiddleButton:
-			print("Middle mouse button pressed")
-		elif mb == guitk.constants.BCRightButton:
-			print("Right mouse button pressed")
-		
-		return 1
-	
+					
 	#-------------------------------------------------------------------------
 	
 	def setTypeGeom(self, index, geomType):

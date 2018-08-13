@@ -13,6 +13,10 @@ from _imaging import path
 
 PATH_SELF = os.path.dirname(os.path.abspath(__file__))
 
+PRODUCTIVE_VERSION_BIN = '/data/fem/+software/SKRIPTY/tools/bin'
+CONFIG_FILE = 'ini/config.ini'
+CONFIG_FILE_TEMPLATE = 'ini/config_template.ini'
+
 #===============================================================================
 
 def runSubprocess(command):
@@ -21,6 +25,26 @@ def runSubprocess(command):
     
     return process.communicate()
 
+#===============================================================================
+
+def createConfigFile():
+    
+    print 'Updating a configuration file'
+    
+    cfgFileName = os.path.join(PATH_SELF, CONFIG_FILE_TEMPLATE)
+    cfgFile = open(cfgFileName, 'rt')
+    template = string.Template(cfgFile.read())
+    cfgFile.close()
+    
+    outputString = template.substitute(
+        {'revision' : args.revision,
+         'modifiedBy' : modifiedBy,
+         'lastModified': lastModified})
+    
+    cfgFile = open(os.path.join(targetDir, CONFIG_FILE), 'wt')
+    cfgFile.write(outputString)
+    cfgFile.close()
+    
 #=============================================================================
 
 def createRevisionContents():
@@ -44,9 +68,27 @@ def cleanUp():
     
     repositoryPath = os.path.join(targetDir, '.git')
     shutil.rmtree(repositoryPath)
-        
+
+    configFileTemplate = os.path.join(targetDir, CONFIG_FILE_TEMPLATE)
+    os.remove(configFileTemplate)
+    
     buildScript = os.path.join(targetDir, 'build.py')
     os.remove(buildScript)
+
+#=============================================================================
+
+def getRevisionInfo():
+    
+    print 'Gathering revision information'
+    
+    output, _ = runSubprocess('git log %s -n 1' % args.revision)
+    
+    lines = output.split('\n')
+    
+    modifiedBy = lines[1].split(':')[1].strip()
+    lastModified = ':'.join(lines[2].split(':')[1:]).strip()
+    
+    return modifiedBy, lastModified
 
 #=============================================================================
 
@@ -74,6 +116,8 @@ args = parser.parse_args()
 targetDir = os.path.join(args.target, args.revision)
 
 createRevisionContents()
+modifiedBy, lastModified = getRevisionInfo()
+createConfigFile()
 cleanUp()
 
 if args.install:

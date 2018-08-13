@@ -9,16 +9,9 @@ from ansa import base, constants, guitk
 
 # ==============================================================================
 
-PATH_BIN = os.path.dirname(os.path.abspath(__file__))
-PATH_RES = os.path.normpath(os.path.join(PATH_BIN, '..', 'res'))
-try:
-	sys.path.append(PATH_BIN)
-	import util
-	
-	print('Runnig devel version ', __file__)
-	
-except ImportError as e:
-	ansa.ImportCode(os.path.join(PATH_BIN, 'util.py'))
+PATH_BIN = os.path.dirname(os.path.realpath(__file__))
+
+ansa.ImportCode(os.path.join(PATH_BIN, 'util.py'))
 
 # ==============================================================================
 
@@ -183,7 +176,7 @@ class StandartGeomType(metaclass=GeomTypeMetaClass):
 	
 	TYPE_NAME = 'Standart'
 	INFO ='Standart geometrical clip type.'
-	ICON = os.path.join(PATH_RES, 'icons', 'clip_geom_standart.png')
+	ICON = os.path.join(util.PATH_RES, 'icons', 'clip_geom_standart.png')
 	
 	CONNECTOR_LENGTH = 1.0
 	
@@ -722,7 +715,7 @@ class ReversedGeomType(StandartGeomType):
 	
 	TYPE_NAME = 'Reversed'
 	INFO ='Reversed geometrical clip type.'
-	ICON = os.path.join(PATH_RES, 'icons', 'clip_geom_reversed.png')
+	ICON = os.path.join(util.PATH_RES, 'icons', 'clip_geom_reversed.png')
 	
 	#-------------------------------------------------------------------------
     
@@ -752,7 +745,7 @@ class LockGeomType(ReversedGeomType):
 	
 	TYPE_NAME = 'Lock'
 	INFO ='Lock-like geometrical clip type.'
-	ICON = os.path.join(PATH_RES, 'icons', 'clip_geom_lock.png')
+	ICON = os.path.join(util.PATH_RES, 'icons', 'clip_geom_lock.png')
 
 # ==============================================================================
 
@@ -760,7 +753,7 @@ class FlatGeomType(StandartGeomType):
 	
 	TYPE_NAME = 'Flat'
 	INFO ='Flat geometrical clip type without clip. Requires: 1. selection of the guiding CON and 2. top face. Guiding CON must be created by cutting the front face if not present.'
-	ICON = os.path.join(PATH_RES, 'icons', 'clip_geom_flat.png')
+	ICON = os.path.join(util.PATH_RES, 'icons', 'clip_geom_flat.png')
 	
 	NEAR_RADIUS = 15.0
 						
@@ -819,7 +812,7 @@ class AudiBeamType(metaclass=BeamTypeMetaClass):
 	
 	TYPE_NAME = 'AUDI'
 	INFO ='AUDI CONNECTOR type clip consists of 1 connector element and beams joining connector with a clip and its contra side.'
-	ICON = os.path.join(PATH_RES, 'icons', 'clip_beam_audi.png')
+	ICON = os.path.join(util.PATH_RES, 'icons', 'clip_beam_audi.png')
 	
 	CONNECTOR_ELASTICITY = [50, 50, 50]
 	CONNECTOR_LENGTH = 1.0
@@ -1131,7 +1124,7 @@ class SkodaBeamType(AudiBeamType):
 	
 	TYPE_NAME = 'SKODA'
 	INFO = 'SKODA CONNECTOR type clip consists of 3 connectors joined together with steel beams of very low density and beams joining connector with a clip and its contra side.'
-	ICON = os.path.join(PATH_RES, 'icons', 'clip_beam_skoda.png')
+	ICON = os.path.join(util.PATH_RES, 'icons', 'clip_beam_skoda.png')
 	
 	CONNECTOR_ELASTICITY = [1, 1, 1, 10, 10, 10]
 	CONNECTOR_DISTANCE = 5.0

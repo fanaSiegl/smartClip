@@ -8,20 +8,11 @@ from ansa import base, guitk, constants
 
 # ==============================================================================
 
-PATH_BIN = os.path.dirname(os.path.abspath(__file__))
-PATH_RES = os.path.normpath(os.path.join(PATH_BIN, '..', 'res'))
+PATH_BIN = os.path.dirname(os.path.realpath(__file__))
 
-try:
-	sys.path.append(PATH_BIN)
-	import util
-	import comp_items
-	
-#	print('Runnig devel version ', __file__)
-	
-except ImportError as e:
-	ansa.ImportCode(os.path.join(PATH_BIN, 'util.py'))
-	ansa.ImportCode(os.path.join(PATH_BIN, 'comp_items.py'))
-	
+ansa.ImportCode(os.path.join(PATH_BIN, 'util.py'))
+ansa.ImportCode(os.path.join(PATH_BIN, 'comp_items.py'))
+
 # ==============================================================================
 
 class PageContainer(object):
