@@ -117,7 +117,7 @@ def createDocumentation():
     SPHINX_SOURCE = os.path.join(SPHINX_DOC, 'source')
     SPHINX_DOCTREES = os.path.join(SPHINX_DOC, 'build', 'doctrees')
     SPHINX_HTML = os.path.join(SPHINX_DOC, 'build', 'html')
-    
+        
     # create local documentation
     os.system('sphinx-build -b html -d %s %s %s' % (SPHINX_DOCTREES, SPHINX_SOURCE, SPHINX_HTML))
 
