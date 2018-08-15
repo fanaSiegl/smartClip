@@ -17,6 +17,12 @@ PRODUCTIVE_VERSION_BIN = '/data/fem/+software/SKRIPTY/tools/bin'
 CONFIG_FILE = 'ini/config.ini'
 CONFIG_FILE_TEMPLATE = 'ini/config_template.ini'
 
+APPLICATION_NAME = 'smartClip'
+
+DOCUMENTATON_PATH = '/data/fem/+software/SKRIPTY/tools/python/tool_documentation/default'
+DOCUMENTATON_GROUP = 'ANSA tools'
+DOCUMENTATON_DESCRIPTION = 'is a tool to make the clip definition as easy as possible.'
+
 #===============================================================================
 
 def runSubprocess(command):
@@ -102,6 +108,49 @@ def install():
         os.unlink(defaultDir)
     os.symlink(args.revision, defaultDir)
 
+
+#=============================================================================
+
+def createDocumentation():
+    
+    SPHINX_DOC = os.path.join(targetDir, 'doc', 'sphinx')
+    SPHINX_SOURCE = os.path.join(SPHINX_DOC, 'source')
+    SPHINX_DOCTREES = os.path.join(SPHINX_DOC, 'build', 'doctrees')
+    SPHINX_HTML = os.path.join(SPHINX_DOC, 'build', 'html')
+    
+    # create local documentation
+    os.system('sphinx-build -b html -d %s %s %s' % (SPHINX_DOCTREES, SPHINX_SOURCE, SPHINX_HTML))
+
+
+#=============================================================================
+
+def publishDocumentation():
+
+    SPHINX_DOC = os.path.join(targetDir, 'doc', 'sphinx')
+    SPHINX_HTML = os.path.join(SPHINX_DOC, 'build', 'html')
+    
+    SPHINX_INDEX = os.path.join(SPHINX_HTML, 'index.thml')
+    
+    # copy to tool documentation
+    docFileName = os.path.join(DOCUMENTATON_PATH, 'source',
+        DOCUMENTATON_GROUP.replace(' ', '_'), '%s.rst' % APPLICATION_NAME)
+    
+    if not os.path.exists(os.path.dirname(docFileName)):
+        os.mkdir(os.path.dirname(docFileName))
+    
+    if os.path.exists(docFileName):
+        os.remove(docFileName)
+    
+    fo = open(docFileName, 'wt')
+    fo.write('.. _%s: %s\n\n' % (APPLICATION_NAME, SPHINX_INDEX))
+    fo.write('`%s`_ - %s\n\n' % (APPLICATION_NAME, DOCUMENTATON_DESCRIPTION))
+    fo.close()
+    
+    # update tool documentation
+    updateScriptPath = os.path.join(DOCUMENTATON_PATH, 'buildHtmlDoc.py')
+    os.system(updateScriptPath)
+    
+    
 #=============================================================================
     
 parser = argparse.ArgumentParser(description=__doc__,
@@ -118,9 +167,11 @@ targetDir = os.path.join(args.target, args.revision)
 createRevisionContents()
 modifiedBy, lastModified = getRevisionInfo()
 createConfigFile()
+createDocumentation()
 cleanUp()
 
 if args.install:
     install()
+    publishDocumentation()
     
 print 'Done'
