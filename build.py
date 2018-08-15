@@ -129,7 +129,7 @@ def publishDocumentation():
     SPHINX_DOC = os.path.join(targetDir, 'doc', 'sphinx')
     SPHINX_HTML = os.path.join(SPHINX_DOC, 'build', 'html')
     
-    SPHINX_INDEX = os.path.join(SPHINX_HTML, 'index.thml')
+    SPHINX_INDEX = os.path.join(SPHINX_HTML, 'index.html')
     
     # copy to tool documentation
     docFileName = os.path.join(DOCUMENTATON_PATH, 'source',
