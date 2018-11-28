@@ -13,7 +13,7 @@ PATH_BIN = os.path.dirname(os.path.realpath(__file__))
 PATH_INI = os.path.normpath(os.path.join(PATH_BIN,'..', 'ini'))
 PATH_RES = os.path.normpath(os.path.join(PATH_BIN, '..', 'res'))
 
-CONFIG_FILE = 'config.ini'
+VERSION_FILE = 'version.ini'
 
 DESCRIPTION = '''
 SmartClip
@@ -67,7 +67,7 @@ def getVersionInfo():
 
 	config = configparser.ConfigParser()
 
-	cfgFileName = os.path.join(PATH_INI, CONFIG_FILE)
+	cfgFileName = os.path.join(PATH_INI, VERSION_FILE)
 	config.read(cfgFileName)
 
 	revision = config.get(SECTION_VERSION, 'REVISION')

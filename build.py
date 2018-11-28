@@ -14,8 +14,8 @@ from _imaging import path
 PATH_SELF = os.path.dirname(os.path.abspath(__file__))
 
 PRODUCTIVE_VERSION_BIN = '/data/fem/+software/SKRIPTY/tools/bin'
-CONFIG_FILE = 'ini/config.ini'
-CONFIG_FILE_TEMPLATE = 'ini/config_template.ini'
+
+VERSION_FILE = 'ini/version.ini'
 
 APPLICATION_NAME = 'smartClip'
 
@@ -33,23 +33,25 @@ def runSubprocess(command):
 
 #===============================================================================
 
-def createConfigFile():
+def createVersionFile():
     
     print 'Updating a configuration file'
     
-    cfgFileName = os.path.join(PATH_SELF, CONFIG_FILE_TEMPLATE)
-    cfgFile = open(cfgFileName, 'rt')
-    template = string.Template(cfgFile.read())
-    cfgFile.close()
+    VERSION_FILE_TEMPLATE = '''[VERSION]
+REVISION = ${revision}
+AUTHOR = ${modifiedBy}
+MODIFIED = ${lastModified}'''
+    
+    template = string.Template(VERSION_FILE_TEMPLATE)
     
     outputString = template.substitute(
         {'revision' : args.revision,
          'modifiedBy' : modifiedBy,
          'lastModified': lastModified})
     
-    cfgFile = open(os.path.join(targetDir, CONFIG_FILE), 'wt')
-    cfgFile.write(outputString)
-    cfgFile.close()
+    versionFile = open(os.path.join(targetDir, VERSION_FILE), 'wt')
+    versionFile.write(outputString)
+    versionFile.close()
     
 #=============================================================================
 
@@ -117,10 +119,11 @@ def createDocumentation():
     SPHINX_SOURCE = os.path.join(SPHINX_DOC, 'source')
     SPHINX_DOCTREES = os.path.join(SPHINX_DOC, 'build', 'doctrees')
     SPHINX_HTML = os.path.join(SPHINX_DOC, 'build', 'html')
-        
+    SPHINX_BUILD = os.path.join(SPHINX_DOC, 'sphinx-build.py')
+    
     # create local documentation
-    os.system('sphinx-build -b html -d %s %s %s' % (SPHINX_DOCTREES, SPHINX_SOURCE, SPHINX_HTML))
-
+    runSubprocess('python %s -b html -d %s %s %s' % (
+        SPHINX_BUILD, SPHINX_DOCTREES, SPHINX_SOURCE, SPHINX_HTML))
 
 #=============================================================================
 
@@ -166,7 +169,7 @@ targetDir = os.path.join(args.target, args.revision)
 
 createRevisionContents()
 modifiedBy, lastModified = getRevisionInfo()
-createConfigFile()
+createVersionFile()
 createDocumentation()
 cleanUp()
 
