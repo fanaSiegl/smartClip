@@ -79,6 +79,10 @@ def cleanUp():
     
     buildScript = os.path.join(targetDir, 'build.py')
     os.remove(buildScript)
+    
+    gitIgnore = os.path.join(targetDir, '.gitignore')
+    if os.path.isfile(gitIgnore):
+        os.remove(gitIgnore) 
 
 #=============================================================================
 
