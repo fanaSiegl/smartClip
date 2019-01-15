@@ -230,7 +230,8 @@ class SelectConPage(StackWidgetPage):
     
 	def updateInfo(self):
 		
-		self._setInfoAttributeValue('selectedCONid', 'ID %s' % self.smartClip().geomType().selectedCon._id)
+		if self.smartClip().geomType().selectedCon is not None:
+			self._setInfoAttributeValue('selectedCONid', 'ID %s' % self.smartClip().geomType().selectedCon._id)
 		self._setInfoAttributeValue('xLow', self.smartClip().geomType().xLow, style='<p style="color:blue">%s</p>')
 		self._setInfoAttributeValue('xUp', self.smartClip().geomType().xUp, style='<p style="color:red">%s</p>')
 		self._setInfoAttributeValue('yLow', self.smartClip().geomType().yLow, style='<p style="color:blue">%s</p>')

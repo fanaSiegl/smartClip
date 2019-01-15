@@ -1,6 +1,52 @@
+# PYTHON script
+
+'''
+SmartClip
+=========
+
+is a tool to make the clip definition as easy as possible.
+
+About
+-----
+
+According to the guiding CON that must be selected by a user, searches for normals of neighbour faces and defines a base
+coordinate system orientation. Projects points to its boundaries in the correspondent vectors and searches for their projection to
+the clip contra part. Measures projection distance and defines CONNECTOR STOP property.
+In the second step, the user is requested to select nodes for the beam definition connecting the connector element with the clip
+itself and the contra part.
+
+Requirements
+------------
+
+.. warning::
+    
+    When run as a plugin, ANSA 18.0.1 and newer must be used! This is due to a bug in version 17.x.x
+
+
+* SmartClip requires geometry and FEM model loaded into the one session.
+* At least the clip part geometry has to be meshed (the finer the mesh is the more accurate is the stop distances mechanism).
+    
+
+Usage
+-----
+
+1. select guiding CON
+2. select nodes connecting the connector element and the clip contra part
+3. select nodes connecting the connector element and the clip itself
+4. an option to create a symmetrical clip automatically
+
+
+Best practice
+-------------
+    
+* Keep FEM model visible (visib switch on) in the time of guiding CON selection.
+* Try to reduce model geometry and avoid large faces (cut them if necessary). That will significantly reduce the time for clip creation.
+	
+'''
 
 import os
 import sys
+from traceback import format_exc
 
 import ansa
 from ansa import base, guitk, constants
@@ -17,6 +63,23 @@ from comp_items import SmartClipException
 
 # ==============================================================================
 
+def setWaitCursor(method, *args):
+	def methodWithWaitCursor(*args):
+		
+#		parent = args[0]
+#		guitk.BCSetApplicationOverrideCursor(guitk.constants.BCCursorWait)
+		try:
+			method(*args)
+		except Exception as e:
+			print(format_exc())
+			showCriticalMessage(str(e))
+		
+#		guitk.BCRestoreApplicationOverrideCursor()
+
+	return methodWithWaitCursor
+	
+# ==============================================================================
+
 class SmartClipDialog(object):
 	
 	WIDTH = 600
@@ -28,7 +91,7 @@ class SmartClipDialog(object):
 	
 	def __init__(self):
 		
-		self.initialEntities = base.CollectEntities(constants.ABAQUS, None, ['SHELL', 'FACE', 'BEAM', 'CONNECTOR', 'ORIENTATION_R'], filter_visible=True )
+#		self.initialEntities = base.CollectEntities(constants.ABAQUS, None, ['SHELL', 'FACE', 'BEAM', 'CONNECTOR', 'ORIENTATION_R'], filter_visible=True )
 		self.smartClip = comp_items.SmartClip()
 		self.pageContainer = comp_widgets.PageContainer()
 		
@@ -59,7 +122,7 @@ class SmartClipDialog(object):
 		return self.smartClip
 		
 	#-------------------------------------------------------------------------
-
+	@setWaitCursor
 	def controller(self, wizard, oldIndex, stepId, data):
 		
 		if stepId == 1:
@@ -80,6 +143,7 @@ class SmartClipDialog(object):
 						guitk.BCWizardSetNextButtonEnabled(self.mainWindow, True)
 				except SmartClipException as e:
 					self._showStatusBarMessage(str(e))
+					showCriticalMessage(str(e))					
 					#guitk.BCSetEnabled(self.pushButtonNext, False)
 					if guitk.BCWizardIsNextButtonEnabled(self.mainWindow):
 						guitk.BCWizardSetNextButtonEnabled(self.mainWindow, False)
@@ -97,6 +161,8 @@ class SmartClipDialog(object):
 			
 			if not self.smartClip.beamType().beamsCsDefined:
 				try:
+					self.smartClip.beamType().checkClipSideNodeRedefinition()
+					
 					self.smartClip.beamType().createNodesForConnector()
 					self.smartClip.beamType().createConnector()
 					
@@ -112,6 +178,7 @@ class SmartClipDialog(object):
 						guitk.BCWizardSetNextButtonEnabled(self.mainWindow, True)
 				except SmartClipException as e:
 					self._showStatusBarMessage(str(e))
+					showCriticalMessage(str(e))
 					#guitk.BCSetEnabled(self.pushButtonNext, False)
 					if guitk.BCWizardIsNextButtonEnabled(self.mainWindow):
 						guitk.BCWizardSetNextButtonEnabled(self.mainWindow, False)
@@ -125,6 +192,9 @@ class SmartClipDialog(object):
 			if not self.smartClip.beamType().beamsCcsDefined:
 				try:
 					comp_items.hideAllFaces()
+					
+					self.smartClip.beamType().checkClipContraSideNodeRedefinition()
+					
 					self.smartClip.beamType().createBeamsConnectorClipContraSide()
 					
 					self.pageContainer.updateCurrentWidgetInfo()
@@ -134,6 +204,7 @@ class SmartClipDialog(object):
 						guitk.BCWizardSetNextButtonEnabled(self.mainWindow, True)
 				except SmartClipException as e:
 					self._showStatusBarMessage(str(e))
+					showCriticalMessage(str(e))					
 					#guitk.BCSetEnabled(self.pushButtonNext, False)
 					if guitk.BCWizardIsNextButtonEnabled(self.mainWindow):
 						guitk.BCWizardSetNextButtonEnabled(self.mainWindow, False)
@@ -184,25 +255,23 @@ class SmartClipDialog(object):
  
 def _reject(window, application):
 	
-	answer = showQuestion('Do you really want to quit SmartClip?')
+#	answer = showQuestion('Do you really want to quit SmartClip?')
 	#answer = guitk.UserQuestion('Do you really want to quit SmartClip?')
 	
-	if answer == guitk.constants.BCRetKey or answer == 1:
+#	if answer == guitk.constants.BCRetKey or answer == 1:
 		
-		application.getSmartClip()._restoreF11drawingSettings()
-		guitk.BCDestroyLater(window)
-	#elif answer == guitk.constants.BCEscKey:
-	#	print("Reject")
-	#elif answer == guitk.constants.BCQuitAll:
-	#	guitk.BCDestroyLater(window)
+	application.getSmartClip()._restoreF11drawingSettings()
+#	guitk.BCDestroyLater(window)
+	guitk.BCDestroy(window)
+
 	
 # ==============================================================================
     
 def showCriticalMessage(message):
 	
-	print(message)
+#	print(message)
 	#guitk.UserWarning(message)
-	#guitk.UserError(message)
+	guitk.UserError(message)
 		
 # ==============================================================================
 
@@ -216,29 +285,28 @@ def showQuestion(message):
 	return guitk.BCMessageWindowExecute(messageWindow)
 		
 # ==============================================================================
-
+@setWaitCursor
 def newClip(window, parent):
 		
-		initialEntities = parent.initialEntities
 		# create mirrored clip as the last step
 		if parent.DFT_MIRROR_CLIP:
 			comp_items.SymmetricalClip(parent.smartClip)
 		
+		parent.getSmartClip()._restoreF11drawingSettings()
 		guitk.BCDestroyLater(window)
-		#guitk.BCDestroy(window)
 		
-		print('Initialising a new CLIP')
-		
-		status = base.And(initialEntities)
-		
-		main()
+#		print('Initialising a new CLIP')
+#		
+#		status = base.And(initialEntities)
+#		
+#		main()
 		
 # ==============================================================================
 
 @ansa.session.defbutton('Tools', 'SmartClip', util.DESCRIPTION)
 def main():
 	
-	main.__doc__ = util.DESCRIPTION
+	main.__doc__ = __doc__
 	
 	try:
 		dialog = SmartClipDialog()

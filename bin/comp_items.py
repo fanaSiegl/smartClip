@@ -67,7 +67,7 @@ class SmartClip(object):
 		self._geomType = None
 		self._beamType = None
 		
-		self.clipEntities= list()
+		self.clipEntities= dict()
 				
 		self._storeF11drawingSettings()
 		self._setupF11drawingSettings()
@@ -828,7 +828,7 @@ class AudiBeamType(metaclass=BeamTypeMetaClass):
 		self.beamsCsDefined = False
 		self.beamsCcsDefined = False
 		
-		self.clipEntities= self.parentClip.clipEntities
+		self.clipEntities = self.parentClip.clipEntities
 			
 	#-------------------------------------------------------------------------
     
@@ -844,7 +844,7 @@ class AudiBeamType(metaclass=BeamTypeMetaClass):
 			raise AttributeError( "'%s object has no attribute '%s'" % (self.__class__.__name__, name))
 	
 	#-------------------------------------------------------------------------
-    
+
 	def createNodesForConnector(self):
 				
 		# create nodes for entities		
@@ -853,9 +853,47 @@ class AudiBeamType(metaclass=BeamTypeMetaClass):
 		self.connectingBeamsCenterNode1 = createNode(
 			self.centerCoordPointCoords-0.5*self.CONNECTOR_LENGTH*np.array(self.largeFaceNormal))
 		self.connectingBeamsCenterNode2 = createNode(connectorNodeCoords)
-		
+	
 	#-------------------------------------------------------------------------
-    
+
+	def checkClipSideNodeRedefinition(self):
+
+		if 'connector' in self.clipEntities:
+			base.DeleteEntity(self.clipEntities['connector'], force=True)
+			base.DeleteEntity(self.clipEntities['beams_cs'], force=True)
+			
+			if 'connector_beams' in self.clipEntities:
+				base.DeleteEntity(self.clipEntities['connector_beams'], force=True)
+
+	#-------------------------------------------------------------------------
+
+	def checkClipContraSideNodeRedefinition(self):
+
+		if 'beams_ccs' in self.clipEntities:
+			base.DeleteEntity(self.clipEntities['beams_ccs'], force=True)
+
+	#-------------------------------------------------------------------------
+	
+	def _checkNodeUniqueSelection(self):
+		
+		''' Check that there are no common nodes for clip side and clip contra side.
+		That would mean that clip movement is avoid at all. '''
+		
+		# check non unique nodes
+#		ccsNodeIds = [node._id for node in self.beamNodesCcs]
+#		csNodeIds = [node._id for node in self.beamNodesCs]
+		ccsPids = [prop._id for prop in base.CollectEntities(
+			constants.ABAQUS, self.selectedElementsBeamCcs, "__PROPERTIES__")]
+		csPids = [prop._id for prop in base.CollectEntities(
+			constants.ABAQUS, self.selectedElementsBeamCs, "__PROPERTIES__")]
+		
+		if len(set(ccsPids).intersection(set(csPids))) > 0:
+#			message = 'Same nodes were selected for clip side and clip contra side!'
+			message = 'Selected nodes must not belong to the same property!\nPlease select different nodes.'
+			raise(SmartClipException(message))
+
+	#-------------------------------------------------------------------------
+
 	def createConnector(self):
 		
 		# create connector elasticity
@@ -875,7 +913,6 @@ class AudiBeamType(metaclass=BeamTypeMetaClass):
 			}
 		self.connectorStop = base.CreateEntity(constants.ABAQUS, "CONNECTOR_STOP", vals)
 		
-	
 		# create connector behavior
 		vals = {'Name': 'CONNECTOR BEHAVIOR',
 			'*ELASTICITY': 'YES', 'EL>data': self.connectorElasticity._id,
@@ -896,7 +933,12 @@ class AudiBeamType(metaclass=BeamTypeMetaClass):
 			'G1':  self.connectingBeamsCenterNode1._id, 'G2': self.connectingBeamsCenterNode2._id}
 		self.connector = base.CreateEntity(constants.ABAQUS, "CONNECTOR", vals)
 		
-		self.clipEntities.append(self.connector)
+		self.clipEntities['connector'] = [
+			self.connectorElasticity,
+			self.connectorStop,
+			self.connectorBehavior,
+			self.connectorSection,
+			self.connector]
 	
 	#-------------------------------------------------------------------------
     
@@ -926,8 +968,8 @@ class AudiBeamType(metaclass=BeamTypeMetaClass):
 				print(str(e))
 				nearestElements = list()
 		else:
-			# delete already created beams
-			base.DeleteEntity(self.beamsCcs, force=True)
+#			# delete already created beams
+#			base.DeleteEntity(self.beamsCcs, force=True)
 			nearestElements = self.selectedElementsBeamCcs
 		
 		print('Select nodes for beam definition: CONNECTOR - CLIP contra side.')
@@ -937,16 +979,7 @@ class AudiBeamType(metaclass=BeamTypeMetaClass):
 			raise(SmartClipException('No NODES selected for CONNECTOR - CLIP contra side!'))
 		
 		self.beamNodesCcs = base.CollectEntities(constants.ABAQUS, selectedElements, "NODE")
-		
-		# create beams
-#		print('Select nodes for beam definition: CONNECTOR - CLIP contra side.')
-#		self.beamNodesCcs = base.PickEntities(constants.ABAQUS, "NODE", initial_entities = self.connectingBeamsCenterNode2)
-#		try:
-#			self.beamNodesCcs.remove(self.connectingBeamsCenterNode2)
-#		except:
-#			self.beamNodesCcs = None
-#			raise(SmartClipException('No NODES selected for CONNECTOR - CLIP contra side!'))
-		
+						
 		if len(self.beamNodesCcs) == 0:
 			self.beamNodesCcs = None
 			raise(SmartClipException('No NODES selected for CONNECTOR - CLIP contra side!'))
@@ -954,6 +987,9 @@ class AudiBeamType(metaclass=BeamTypeMetaClass):
 		# save selected elements for further re-selection
 		self.selectedElementsBeamCcs = selectedElements
 		self.beamsCcsDefined = True
+
+		# check that there are no common nodes for clip side and clip contra side
+		self._checkNodeUniqueSelection()
 		
 		elements = base.NodesToElements(self.beamNodesCcs)
 	#TODO: check if all nodes belong to the one property!!
@@ -999,7 +1035,7 @@ class AudiBeamType(metaclass=BeamTypeMetaClass):
 		
 		self.beamsCcs = list()
 		for node in self.beamNodesCcs:
-			vals = {'Name': 'BEAM',
+			vals = {'Name': 'BEAM_CLIP_CONTRA_SIDE',
 				'PID': self.beamSectionCcs._id,
 				'NODE1': self.connectingBeamsCenterNode2._id,
 				'NODE2': node._id,
@@ -1007,7 +1043,8 @@ class AudiBeamType(metaclass=BeamTypeMetaClass):
 			beam = base.CreateEntity(constants.ABAQUS, "BEAM", vals)
 			self.beamsCcs.append(beam)
 		
-		self.clipEntities.extend(self.beamsCcs)
+		self.clipEntities['beams_ccs'] = self.beamsCcs
+		self.clipEntities['beams_ccs'].append(self.beamSectionCcs)
 		
 		base.RedrawAll()
 			
@@ -1031,8 +1068,8 @@ class AudiBeamType(metaclass=BeamTypeMetaClass):
 			except Exception as e:
 				pass
 		else:
-			# delete already created beams
-			base.DeleteEntity(self.beamsCs, force=True)
+#			# delete already created beams
+#			base.DeleteEntity(self.beamsCs, force=True)
 			nearestElements = self.selectedElementsBeamCs
 		
 		print('Select nodes for beam definition: CONNECTOR - CLIP.')
@@ -1101,11 +1138,11 @@ class AudiBeamType(metaclass=BeamTypeMetaClass):
 			#'E' : getEntityProperty(material, 'YOUNG'),
 			#'G' :  getEntityProperty(material, 'YOUNG')/(2*(1+getEntityProperty(material, 'POISSON')))
 				}
-		self.beamSectionCs= base.CreateEntity(constants.ABAQUS, "BEAM_SECTION", vals)
+		self.beamSectionCs = base.CreateEntity(constants.ABAQUS, "BEAM_SECTION", vals)
 		
 		self.beamsCs = list()
 		for node in self.beamNodesCs:
-			vals = {'Name': 'BEAM',
+			vals = {'Name': 'BEAM_CLIP_SIDE',
 				'PID': self.beamSectionCs._id,
 				'NODE1': self.connectingBeamsCenterNode1._id,
 				'NODE2': node._id,
@@ -1113,7 +1150,8 @@ class AudiBeamType(metaclass=BeamTypeMetaClass):
 			beam = base.CreateEntity(constants.ABAQUS, "BEAM", vals)
 			self.beamsCs.append(beam)
 		
-		self.clipEntities.extend(self.beamsCs)
+		self.clipEntities['beams_cs'] = self.beamsCs
+		self.clipEntities['beams_cs'].append(self.beamSectionCs)
 		
 		base.RedrawAll()
 		
@@ -1175,7 +1213,7 @@ class SkodaBeamType(AudiBeamType):
 	#-------------------------------------------------------------------------
 	
 	def createConnector(self):
-		
+				
 		# create connector elasticity
 		vals = {'Name': 'CONNECTOR_ELASTICITY',
 			 'COMP': 'YES',
@@ -1250,7 +1288,16 @@ class SkodaBeamType(AudiBeamType):
 			'G1':  self.con3Node1._id, 'G2': self.con3Node2._id}
 		self.connectorC3 = base.CreateEntity(constants.ABAQUS, "CONNECTOR", vals)
 		
-		self.clipEntities.extend([self.connectorC1, self.connectorC2, self.connectorC3])
+		self.clipEntities['connector'] = [
+			self.connectorElasticity,
+			self.connectorStop,
+			self.connectorBehavior,
+			self.connectorSection,
+			self.connectorC1, self.connectorC2,
+			self.connectorStopC3,
+			self.connectorBehaviorC3,
+			self.connectorSectionC3,
+			self.connectorC3]
 		
 		self.connectConnectorsWithBeams()
 	
@@ -1297,7 +1344,7 @@ class SkodaBeamType(AudiBeamType):
 		# create connecting beams
 		self.connectingBeams = list()
 		for node in [self.con1Node1, self.con2Node1, self.con3Node1]:
-			vals = {'Name': 'BEAM',
+			vals = {'Name': 'BEAM_CONNECTOR_CLIP_SIDE',
 				'PID': self.connectingBeamsSection._id,
 				'NODE1': self.connectingBeamsCenterNode1._id,
 				'NODE2': node._id,
@@ -1305,7 +1352,7 @@ class SkodaBeamType(AudiBeamType):
 			beam = base.CreateEntity(constants.ABAQUS, "BEAM", vals)
 			self.connectingBeams.append(beam)
 		for node in [self.con1Node2, self.con2Node2, self.con3Node2]:
-			vals = {'Name': 'BEAM',
+			vals = {'Name': 'BEAM_CONNECTOR_CLIP_CONTRA_SIDE',
 				'PID': self.connectingBeamsSection._id,
 				'NODE1': self.connectingBeamsCenterNode2._id,
 				'NODE2': node._id,
@@ -1313,7 +1360,7 @@ class SkodaBeamType(AudiBeamType):
 			beam = base.CreateEntity(constants.ABAQUS, "BEAM", vals)
 			self.connectingBeams.append(beam)
 		
-		self.clipEntities.extend(self.connectingBeams)
+		self.clipEntities['connector_beams'] = self.connectingBeams
 
 # ==============================================================================
 
@@ -1334,7 +1381,12 @@ class SymmetricalClip(object):
 	
 	def mirrorClip(self):
 		
-		entities = self.parentClip.clipEntities
+		entities = list()
+		for ents in self.parentClip.clipEntities.values(): 
+			if type(ents) is list:
+				entities.extend(ents)
+			else:
+				entities.append(ents)
 		
 		collector = base.CollectNewModelEntities(constants.ABAQUS, "CONNECTOR")
 		base.GeoSymmetry("COPY", "AUTO_OFFSET", "SAME PART", "NONE", entities, keep_connectivity=True)
