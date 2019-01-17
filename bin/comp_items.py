@@ -790,7 +790,8 @@ class FlatGeomType(StandartGeomType):
 			self.sideProjectionVectorMinus = baseSideVector
 		
 		# this is correct orthogonal vector that a small face should have in case of 90 degrees...
-		self.smallFaceOrthoVector = np.cross(self.largeFaceNormal, self.sideProjectionVectorMinus)
+		smallFaceOrthoVector = np.cross(self.largeFaceNormal, self.sideProjectionVectorMinus)
+		self.smallFaceOrthoVector = smallFaceOrthoVector / np.linalg.norm(smallFaceOrthoVector)
 		self.oppositeProjectionVector = -1*np.array(self.largeFaceNormal)
 		
 		self.middlePointCoords = getConMiddle(self.selectedCon)		

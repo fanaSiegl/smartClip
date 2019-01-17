@@ -303,7 +303,7 @@ def newClip(window, parent):
 		
 # ==============================================================================
 
-@ansa.session.defbutton('Tools', 'SmartClip', util.DESCRIPTION)
+@ansa.session.defbutton('Tools', 'SmartClip', __doc__)
 def main():
 	
 	main.__doc__ = __doc__
