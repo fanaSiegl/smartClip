@@ -44,6 +44,9 @@ Best practice
 	
 '''
 
+DOCUMENTATON_GROUP = 'ANSA tools'
+DOCUMENTATON_DESCRIPTION = 'tool to make the clip definition as easy as possible'
+
 import os
 import sys
 from traceback import format_exc
