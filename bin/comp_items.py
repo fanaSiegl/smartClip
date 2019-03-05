@@ -336,13 +336,13 @@ class StandartGeomType(metaclass=GeomTypeMetaClass):
 		return faceDist
 
 	#-------------------------------------------------------------------------
-    
+
 	def _getAngleSortedFaces(self, faces, sortingVector, excludeFaces=list(), angleLimit=45):
 				
 		# limit max recursion for face search
 		if angleLimit >= self.FACE_ANGLE_LIMIT:
-            print('Angle limit reached. No faces found!')
-            return []
+			print('Angle limit reached. No faces found!')
+			return []
 		
 		def sortFacesFcn(face):
 			angle = ansa.calc.CalcAngleOfVectors(base.GetFaceOrientation(face), sortingVector)
