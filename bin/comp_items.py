@@ -62,7 +62,7 @@ class SmartClip(object):
 	
 	coordsDrawState = None
 	
-	def __init__(self, geomType='Standart', beamType='AUDI'):
+	def __init__(self, geomType='Standard', beamType='AUDI'):
 		
 		self._geomType = None
 		self._beamType = None
@@ -172,11 +172,11 @@ class SmartClip(object):
 	
 # ==============================================================================
 
-class StandartGeomType(metaclass=GeomTypeMetaClass):
+class StandardGeomType(metaclass=GeomTypeMetaClass):
 	
-	TYPE_NAME = 'Standart'
-	INFO ='Standart geometrical clip type.'
-	ICON = os.path.join(util.PATH_RES, 'icons', 'clip_geom_standart.png')
+	TYPE_NAME = 'Standard'
+	INFO ='Standard geometrical clip type.'
+	ICON = os.path.join(util.PATH_RES, 'icons', 'clip_geom_standard.png')
 	
 	CONNECTOR_LENGTH = 1.0
 	
@@ -716,7 +716,7 @@ class StandartGeomType(metaclass=GeomTypeMetaClass):
 
 # ==============================================================================
 
-class ReversedGeomType(StandartGeomType):
+class ReversedGeomType(StandardGeomType):
 	
 	TYPE_NAME = 'Reversed'
 	INFO ='Reversed geometrical clip type.'
@@ -727,7 +727,7 @@ class ReversedGeomType(StandartGeomType):
 	def setBaseFaces(self):
 												
 		self._searchClipSurroundingArea()
-		# standart type compatible orientation
+		# standard type compatible orientation
 		self.largeFaceNormal = -1*np.array(self.largeFaceNormal)
 		
 		self.sideProjectionVectorPlus = np.cross(self.largeFaceNormal, self.smallFaceNormal)
@@ -754,7 +754,7 @@ class LockGeomType(ReversedGeomType):
 
 # ==============================================================================
 
-class FlatGeomType(StandartGeomType):
+class FlatGeomType(StandardGeomType):
 	
 	TYPE_NAME = 'Flat'
 	INFO ='Flat geometrical clip type without clip. Requires: 1. selection of the guiding CON and 2. top face. Guiding CON must be created by cutting the front face if not present.'
@@ -966,7 +966,7 @@ class AudiBeamType(metaclass=BeamTypeMetaClass):
 		
 		# if no elements were selected before try to find the nearest ones
 		if len(self.selectedElementsBeamCcs) == 0:
-			# some points may not be defined because of non standart clip shape
+			# some points may not be defined because of non standard clip shape
 			try:
 				nearestElements = findNearestElements(
 					np.array(getHotPointCoords(self.centerCoordNode)) + 3*np.array(self.largeFaceNormal), self.clipAreaShells)
@@ -1064,7 +1064,7 @@ class AudiBeamType(metaclass=BeamTypeMetaClass):
 		# if no elements were selected before try to find the nearest ones
 		if len(self.selectedElementsBeamCs) == 0:
 			nearestElements = list()
-			# some points may not be defined because of non standart clip shape
+			# some points may not be defined because of non standard clip shape
 			try:
 				coords = [np.array(getHotPointCoords(self.centerCoordNode))]
 				coords.append(np.array(getHotPointCoords(self.centerCoordNode)) + 4*np.array(self.sideProjectionVectorPlus))
@@ -1639,7 +1639,7 @@ def hideAllFaces():
 # ==============================================================================
 
 #@ansa.session.defbutton('Mesh', 'SmartClip')
-def runSmartClip(geomType='Standart', beamType='AUDI'):
+def runSmartClip(geomType='Standard', beamType='AUDI'):
 	
 	'''"SmartClip" tool is an utility to make the clip definition as easy as possible.
 	
@@ -1666,7 +1666,7 @@ NOTE:
 
 #if __name__ == '__main__':
 #	runSmartClip('Reversed', 'SKODA')
-#	runSmartClip('Standart', 'SKODA')
-#	runSmartClip('Standart', 'AUDI')
+#	runSmartClip('Standard', 'SKODA')
+#	runSmartClip('Standard', 'AUDI')
 #	runSmartClip('Reversed', 'AUDI')
 

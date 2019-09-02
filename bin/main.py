@@ -56,7 +56,12 @@ from ansa import base, guitk, constants
 
 # ==============================================================================
 
-PATH_SELF = os.path.dirname(os.path.realpath(__file__))
+# in case of running from remote simlink in windows
+if 'win' in sys.platform:
+	toolName = os.path.splitext(os.path.basename(__file__))[0].replace('tool_', '')
+	PATH_SELF = os.path.join(os.environ['ANSA_TOOLS'], toolName, 'default', 'bin')
+else:
+	PATH_SELF = os.path.dirname(os.path.realpath(__file__))
 
 ansa.ImportCode(os.path.join(PATH_SELF, 'util.py'))
 ansa.ImportCode(os.path.join(PATH_SELF, 'comp_items.py'))
