@@ -71,7 +71,8 @@ class BasePage(object):
 		
 		''' This is a space for the code that will be activated when page becomes active'''
 		
-		print('page %s activated' % self.TITLE)
+		pass	
+#		print('page %s activated' % self.TITLE)
 	
 	#-------------------------------------------------------------------------
     
@@ -82,17 +83,33 @@ class BasePage(object):
 		pass
 	
 	#-------------------------------------------------------------------------
-
-	def stepFinished(self):
+    
+	def deactivatedBack(self):
 		
-		self.isFinished = True
+		''' This is a space for the code that will be activated when page becomes inactive'''
+		
+		pass
+	
+	#-------------------------------------------------------------------------
+    
+	def deactivatedNext(self):
+		
+		''' This is a space for the code that will be activated when page becomes inactive'''
+		
+		pass
+		
+	#-------------------------------------------------------------------------
+
+	def stepFinished(self, value=True):
+		
+		self.isFinished = value
 		self.parentApplication.stepFinished()
 	
 	#-------------------------------------------------------------------------
 	
-	def showMessage(self, message):
+	def showMessage(self, message, critical=False):
 		
-		self.parentApplication.showMessage(message)
+		self.parentApplication.showMessage(message, critical)
 	
 	#-------------------------------------------------------------------------
 
@@ -116,6 +133,30 @@ class BasePage(object):
 		
 		 return self.parentApplication.getSmartClip()
 	
+	#-------------------------------------------------------------------------
+    
+	def updateInfo(self):
+		
+		pass
+	    
+    #-------------------------------------------------------------------------
+
+	def _setInfoAttributeValue(self, valueAttrName, value, style=False):
+
+		valueWidget = getattr(self, valueAttrName)
+		
+		if style:
+			guitk.BCLabelSetText(valueWidget, style % value)
+		else:
+			guitk.BCLabelSetText(valueWidget, '%s' % value)
+	
+	#-------------------------------------------------------------------------
+
+	def resetInfo(self):
+		
+		for infoAttributeName in self.infoAttributeNames:
+			self._setInfoAttributeValue(infoAttributeName, '-')
+			
 # ==============================================================================
 
 class BasePageChecker(object):

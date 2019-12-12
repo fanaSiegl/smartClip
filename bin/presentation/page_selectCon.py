@@ -16,7 +16,7 @@ ansa.ImportCode(os.path.join(PATH_MAIN, 'domain', 'base_items.py'))
 
 # ==============================================================================
 
-class CoorSysModificationPage(base_widgets.BasePage):
+class SelectConPage(base_widgets.BasePage):
 	
 	TITLE = 'Select CON'
 	DESCRIPTION = 'Select the guiding clip edge - CON'
@@ -27,7 +27,7 @@ class CoorSysModificationPage(base_widgets.BasePage):
 		''' This is a space for the code where underlying data structure can be initialised. '''
 		
 		self.coordSystem = self.smartClip().geomType().coordSystem
-				
+						
 	#-------------------------------------------------------------------------
 
 	def activated(self):
@@ -38,8 +38,15 @@ class CoorSysModificationPage(base_widgets.BasePage):
 			self.conSelect()
 			base.RedrawAll()
 
-			guitk.BCRestoreApplicationOverrideCursor()
-				
+	#-------------------------------------------------------------------------
+    
+	def deactivatedNext(self):
+		
+		''' Once deactivated is should not be possible to modify selected CON '''
+		
+		guitk.BCSetEnabled(self.pushButtonSelectCon, False)
+		self._setRotationButtonsEnabled(False)
+			
 	#-------------------------------------------------------------------------
     
 	def createContent(self):
@@ -105,18 +112,22 @@ class CoorSysModificationPage(base_widgets.BasePage):
 	#-------------------------------------------------------------------------
     
 	def conSelect(self, buttonWidget=None, data=None):
+				
+		try:
+			self.smartClip().geomType().setBaseFaces()
+			
+			self.smartClip().geomType().createCoorSystem()
+						
+			if self.smartClip().geomType().coordSystem.coorSysEntity is not None:
+				self._setRotationButtonsEnabled(True)
+				self.stepFinished()
+			else:
+				self.isFinished = False
+		except base_items.SmartClipException as e:
+			self.isFinished = False
+						
+			self.showMessage(str(e), critical=True)
 		
-		# reset selection and propt the new one
-#		self.smartClip().geomType().selectedCon = None
-#		self.parentApplication.controller(None, None, 1, None)
-		
-		self.smartClip().geomType().setBaseFaces()
-		self.smartClip().geomType().createCoorSystem()
-					
-		if self.smartClip().geomType().coordSystem.coorSysEntity is not None:
-			self._setRotationButtonsEnabled(True)
-			self.stepFinished()
-
 	#-------------------------------------------------------------------------
 	
 	def _setRotationButtonsEnabled(self, state):
@@ -186,4 +197,5 @@ class CoorSysModificationPage(base_widgets.BasePage):
 	def updateInfo(self):
 		
 		if self.smartClip().geomType().selectedCon is not None:
-			self._setInfoAttributeValue('selectedCONid', 'ID %s' % self.smartClip().geomType().selectedCon._id)		
+			self._setInfoAttributeValue('selectedCONid', 'ID %s' % self.smartClip().geomType().selectedCon._id)
+			

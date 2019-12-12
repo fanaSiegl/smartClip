@@ -1,6 +1,7 @@
 # PYTHON script
 import os
 import sys
+import collections
 import numpy as np
 import ansa
  
@@ -21,14 +22,10 @@ def getAnsaVersion():
 	currentVersion = constants.app_version
 	parts = currentVersion.split('.')
 	return int(parts[0])
-	
-# ==============================================================================
-
-class SmartClipException(Exception): pass
 
 # ==============================================================================
 
-clipBeamTypeRegistry = {}
+clipBeamTypeRegistry = collections.OrderedDict()
    
 class BeamTypeMetaClass(type):
     def __new__(cls, clsname, bases, attrs):
@@ -39,7 +36,7 @@ class BeamTypeMetaClass(type):
 
 # ==============================================================================
 
-clipGeomTypeRegistry = {}
+clipGeomTypeRegistry = collections.OrderedDict()
    
 class GeomTypeMetaClass(type):
     def __new__(cls, clsname, bases, attrs):
@@ -144,7 +141,7 @@ class SmartClip(object):
 			self.createConnector()
 			self.createBeams()
 			
-		except SmartClipException as e:
+		except base_items.SmartClipException as e:
 			print(str(e))
 		    
 	#-------------------------------------------------------------------------
@@ -373,7 +370,7 @@ class StandardGeomType(metaclass=GeomTypeMetaClass):
 		
 		if len(nodes) == 0:
 			ansa.guitk.UserWarning('Clip faces must be meshed prior to use clip tool.\n(E.G. Perimeter length = 0.5)')
-			raise(SmartClipException('Faces must be meshed!'))
+			raise base_items.SmartClipException('Faces must be meshed!')
 		
 		facesNodeCoords = list()
 		for entity in nodes:
@@ -427,7 +424,7 @@ class StandardGeomType(metaclass=GeomTypeMetaClass):
 		
 		if selectedCons is None:
 			self.selectedCon = None
-			raise(SmartClipException('No guiding CON selected!'))
+			raise base_items.SmartClipException('No guiding CON selected!')
 		
 		self.selectedCon = selectedCons[0]
 		neighbourFaces = ansa.base.GetFacesOfCons(cons = selectedCons)
@@ -626,11 +623,11 @@ class StandardGeomType(metaclass=GeomTypeMetaClass):
 		
 		if selectedFaces is None:
 			self.showMeasurements()
-			raise(SmartClipException('No faces defining STOP distance selected!'))
+			raise base_items.SmartClipException('No faces defining STOP distance selected!')
 				
 		if len(selectedFaces) < 2:
 			self.showMeasurements()
-			raise(SmartClipException('Please select just two faces.'))
+			raise base_items.SmartClipException('Please select just two faces.')
 			
 		# find selected clip face and its mate
 		selectedClipFaces = list()
@@ -644,10 +641,10 @@ class StandardGeomType(metaclass=GeomTypeMetaClass):
 				
 		if len(selectedClipFaces) == 0:
 			self.showMeasurements()
-			raise(SmartClipException('No clip faces selected!'))
+			raise base_items.SmartClipException('No clip faces selected!')
 		if len(selectedNeighbourFaces) == 0:
 			self.showMeasurements()
-			raise(SmartClipException('No clip neighbour faces selected!'))
+			raise base_items.SmartClipException('No clip neighbour faces selected!')
 		
 		if alterName is not None:
 			stopDistName = alterName
@@ -793,9 +790,9 @@ class FlatGeomType(StandardGeomType):
 		selectedFaces = base.PickEntities(constants.ABAQUS, "FACE")
 		
 		if selectedFaces is None:
-			raise(SmartClipException('No guiding FACE selected!'))
+			raise base_items.SmartClipException('No guiding FACE selected!')
 		if len(selectedFaces) > 1:
-			raise(SmartClipException('Please select just one face.'))
+			raise base_items.SmartClipException('Please select just one face.')
 		
 		self.smallFace = selectedFaces[0]
 		self.smallFaceNormal = -1*np.array(base.GetFaceOrientation(self.smallFace))
@@ -883,13 +880,13 @@ class AudiBeamType(metaclass=BeamTypeMetaClass):
 	#-------------------------------------------------------------------------
 
 	def checkClipSideNodeRedefinition(self):
-
+		
 		if 'connector' in self.clipEntities:
 			base.DeleteEntity(self.clipEntities['connector'], force=True)
+		if 'beams_cs' in self.clipEntities:
 			base.DeleteEntity(self.clipEntities['beams_cs'], force=True)
-			
-			if 'connector_beams' in self.clipEntities:
-				base.DeleteEntity(self.clipEntities['connector_beams'], force=True)
+		if 'connector_beams' in self.clipEntities:
+			base.DeleteEntity(self.clipEntities['connector_beams'], force=True)
 
 	#-------------------------------------------------------------------------
 
@@ -916,7 +913,7 @@ class AudiBeamType(metaclass=BeamTypeMetaClass):
 		if len(set(ccsPids).intersection(set(csPids))) > 0:
 #			message = 'Same nodes were selected for clip side and clip contra side!'
 			message = 'Selected nodes must not belong to the same property!\nPlease select different nodes.'
-			raise(SmartClipException(message))
+			raise base_items.SmartClipException(message)
 
 	#-------------------------------------------------------------------------
 
@@ -1002,13 +999,13 @@ class AudiBeamType(metaclass=BeamTypeMetaClass):
 		selectedElements = base.PickEntities(constants.ABAQUS, "SHELL", initial_entities=nearestElements)
 		
 		if selectedElements is None:
-			raise(SmartClipException('No NODES selected for CONNECTOR - CLIP contra side!'))
+			raise base_items.SmartClipException('No NODES selected for CONNECTOR - CLIP contra side!')
 		
 		self.beamNodesCcs = base.CollectEntities(constants.ABAQUS, selectedElements, "NODE")
 						
 		if len(self.beamNodesCcs) == 0:
 			self.beamNodesCcs = None
-			raise(SmartClipException('No NODES selected for CONNECTOR - CLIP contra side!'))
+			raise base_items.SmartClipException('No NODES selected for CONNECTOR - CLIP contra side!')
 		
 		# save selected elements for further re-selection
 		self.selectedElementsBeamCcs = selectedElements
@@ -1102,7 +1099,7 @@ class AudiBeamType(metaclass=BeamTypeMetaClass):
 		selectedElements = base.PickEntities(constants.ABAQUS, "SHELL", initial_entities=nearestElements)
 		
 		if selectedElements is None:
-			raise(SmartClipException('No NODES selected for CONNECTOR - CLIP side!'))
+			raise base_items.SmartClipException('No NODES selected for CONNECTOR - CLIP side!')
 			
 		self.beamNodesCs = base.CollectEntities(constants.ABAQUS, selectedElements, "NODE")
 		
@@ -1114,11 +1111,11 @@ class AudiBeamType(metaclass=BeamTypeMetaClass):
 #			self.beamNodesCs.remove(self.connectingBeamsCenterNode1)
 #		except:
 #			self.beamNodesCs = None
-#			raise(SmartClipException('No NODES selected for CONNECTOR - CLIP!'))
+#			raise base_items.SmartClipException('No NODES selected for CONNECTOR - CLIP!')
 
 		if len(self.beamNodesCs) == 0:
 			self.beamNodesCs = None
-			raise(SmartClipException('No NODES selected for CONNECTOR - CLIP!'))
+			raise base_items.SmartClipException('No NODES selected for CONNECTOR - CLIP!')
 		
 		# save selected elements for further re-selection
 		self.selectedElementsBeamCs = selectedElements
@@ -1485,7 +1482,7 @@ def createPoint(pointCoords, name=''):
 		newPointEntity = base.Newpoint(*pointCoords)
 		base.SetEntityCardValues(constants.ABAQUS, newPointEntity, {'Name': name})
 	except Exception as e:
-		raise SmartClipException(str(e))
+		raise base_items.SmartClipException(str(e))
 	
 	return newPointEntity
 			
