@@ -63,11 +63,16 @@ if 'win' in sys.platform:
 else:
 	PATH_SELF = os.path.dirname(os.path.realpath(__file__))
 
-ansa.ImportCode(os.path.join(PATH_SELF, 'util.py'))
-ansa.ImportCode(os.path.join(PATH_SELF, 'comp_items.py'))
-ansa.ImportCode(os.path.join(PATH_SELF, 'comp_widgets.py'))
+ansa.ImportCode(os.path.join(PATH_SELF, 'domain', 'util.py'))
+ansa.ImportCode(os.path.join(PATH_SELF, 'domain', 'comp_items.py'))
+ansa.ImportCode(os.path.join(PATH_SELF, 'presentation', 'comp_widgets.py'))
+ansa.ImportCode(os.path.join(PATH_SELF, 'presentation', 'page_coorSys.py'))
 
 from comp_items import SmartClipException
+
+# ==============================================================================
+
+DEBUG = 1
 
 # ==============================================================================
 
@@ -80,9 +85,11 @@ def setWaitCursor(method, *args):
 			method(*args)
 		except Exception as e:
 			print(format_exc())
+			base.BlockRedraws(False)
+			base.RedrawAll()
 			showCriticalMessage(str(e))
-		
-#		guitk.BCRestoreApplicationOverrideCursor()
+			
+			guitk.BCRestoreApplicationOverrideCursor()
 
 	return methodWithWaitCursor
 	
@@ -105,23 +112,28 @@ class SmartClipDialog(object):
 		
 		revision, modifiedBy, lastModified = util.getVersionInfo()
 		
-		self.mainWindow = guitk.BCWizardCreate("SmartClip (%s)" % revision, guitk.constants.BCOnExitDestroy)
-		guitk.BCWindowSetInitSize(self.mainWindow, self.WIDTH, self.HEIGTH)
-		guitk.BCWindowSetSaveSettings(self.mainWindow, False)
+		self.mainWizard = guitk.BCWizardCreate("SmartClip (%s)" % revision, guitk.constants.BCOnExitDestroy)
+		guitk.BCWindowSetInitSize(self.mainWizard, self.WIDTH, self.HEIGTH)
+		guitk.BCWindowSetSaveSettings(self.mainWizard, False)
 		
-		self.page0 = comp_widgets.SelectClipTypePage(self, 'Select CLIP Type', 'Select a type of the CLIP')
-		self.page1 = comp_widgets.SelectConPage(self, 'Select CON', 'Select the guiding clip edge - CON')
-		self.page2 = comp_widgets.SelectClipNodesPage(self, 'Select NODES', 'Select NODES for CONNECTOR on the clip')
-		self.page3 = comp_widgets.SelectClipContraNodesPage(self, 'Select NODES', 'Select NODES for CONNECTOR on the clip contra side')
-		self.page3 = comp_widgets.MirrorClipPage(self, 'Mirror clip', 'Do you want to mirror created clip?')
+		self.pages = list()
+		self.pages.append(comp_widgets.SelectClipTypePage(self, 'Select CLIP Type', 'Select a type of the CLIP'))
+		self.pages.append(page_coorSys.CoorSysModificationPage(self))
+		guitk.BCWizardAddPage(self.mainWizard, self.pages[1].getFrame(), self.pages[1].TITLE, self.pages[1].DESCRIPTION,  self.pages[1].INFO)
+		self.pageContainer.content.append(self.pages[1])
+		
+		self.pages.append(comp_widgets.SelectConPage(self, 'STOP distances', 'Select faces for connector STOP criteria if necessary'))
+		self.pages.append(comp_widgets.SelectClipNodesPage(self, 'Select NODES', 'Select NODES for CONNECTOR on the clip'))
+		self.pages.append(comp_widgets.SelectClipContraNodesPage(self, 'Select NODES', 'Select NODES for CONNECTOR on the clip contra side'))
+		self.pages.append(comp_widgets.MirrorClipPage(self, 'Mirror clip', 'Do you want to mirror created clip?'))
 				
-		guitk.BCWizardSetCurrentPageChangedFunction(self.mainWindow, self.controller, None)
+		guitk.BCWizardSetCurrentPageChangedFunction(self.mainWizard, self.controller, None)
 		
-		guitk.BCWindowSetAcceptFunction(self.mainWindow, newClip, self)
+		guitk.BCWindowSetAcceptFunction(self.mainWizard, newClip, self)
 			
-		guitk.BCWindowSetRejectFunction(self.mainWindow, _reject, self)
-		guitk.BCWindowSetSaveSettings(self.mainWindow, True)
-		guitk.BCShow(self.mainWindow)
+		guitk.BCWindowSetRejectFunction(self.mainWizard, _reject, self)
+		guitk.BCWindowSetSaveSettings(self.mainWizard, True)
+		guitk.BCShow(self.mainWizard)
 	
 	#-------------------------------------------------------------------------
 
@@ -134,38 +146,45 @@ class SmartClipDialog(object):
 	def controller(self, wizard, oldIndex, stepId, data):
 		
 		if stepId == 1:
-			if self.smartClip.geomType().selectedCon is None:
-				try:
-					self.smartClip.geomType().setBaseFaces()
-					
-					guitk.BCSetApplicationOverrideCursor(guitk.constants.BCCursorWait)
-					#self.smartClip.createNodesForConnector()
-					self.smartClip.geomType().setStopDistances(hideMeasurements=False)
-					self.smartClip.geomType().createCoorSystem()
-					#self.smartClip.createConnector()
-					
-					#self.pageContainer.updateCurrentWidgetInfo()
-										
-					#self.next()
-					if not guitk.BCWizardIsNextButtonEnabled(self.mainWindow):
-						guitk.BCWizardSetNextButtonEnabled(self.mainWindow, True)
-				except SmartClipException as e:
-					self._showStatusBarMessage(str(e))
-					showCriticalMessage(str(e))					
-					#guitk.BCSetEnabled(self.pushButtonNext, False)
-					if guitk.BCWizardIsNextButtonEnabled(self.mainWindow):
-						guitk.BCWizardSetNextButtonEnabled(self.mainWindow, False)
+			try:
+				self.pages[1].activated()
+				if not guitk.BCWizardIsNextButtonEnabled(self.mainWizard):
+					guitk.BCWizardSetNextButtonEnabled(self.mainWizard, True)
+			except SmartClipException as e:
+				self._showStatusBarMessage(str(e))
+				showCriticalMessage(str(e))					
+				if guitk.BCWizardIsNextButtonEnabled(self.mainWizard):
+					guitk.BCWizardSetNextButtonEnabled(self.mainWizard, False)
 
-				self.pageContainer.updateCurrentWidgetInfo()
-				
-			else:
-				
-				if not guitk.BCWizardIsNextButtonEnabled(self.mainWindow):
-					guitk.BCWizardSetNextButtonEnabled(self.mainWindow, True)
-				#guitk.BCButtonSetText(self.pushButtonNext, 'Next >')
-			guitk.BCRestoreApplicationOverrideCursor()
-		
+			self.pageContainer.updateCurrentWidgetInfo()
+			
 		elif stepId == 2:
+			guitk.BCSetApplicationOverrideCursor(guitk.constants.BCCursorWait)
+			try:				
+				
+				self.smartClip.geomType().setStopDistances(hideMeasurements=False)
+									
+				if not guitk.BCWizardIsNextButtonEnabled(self.mainWizard):
+					guitk.BCWizardSetNextButtonEnabled(self.mainWizard, True)
+			except SmartClipException as e:
+				self._showStatusBarMessage(str(e))
+				showCriticalMessage(str(e))
+				#guitk.BCSetEnabled(self.pushButtonNext, False)
+				if guitk.BCWizardIsNextButtonEnabled(self.mainWizard):
+					guitk.BCWizardSetNextButtonEnabled(self.mainWizard, False)
+		
+				else:
+					
+					if not guitk.BCWizardIsNextButtonEnabled(self.mainWizard):
+						guitk.BCWizardSetNextButtonEnabled(self.mainWizard, True)
+					#guitk.BCButtonSetText(self.pushButtonNext, 'Next >')
+			
+			self.pageContainer.updateCurrentWidgetInfo()
+			guitk.BCRestoreApplicationOverrideCursor()
+			
+			
+		
+		elif stepId == 3:
 			
 			if not self.smartClip.beamType().beamsCsDefined:
 				try:
@@ -182,20 +201,20 @@ class SmartClipDialog(object):
 					self.pageContainer.updateCurrentWidgetInfo()
 					
 					#self.next()
-					if not guitk.BCWizardIsNextButtonEnabled(self.mainWindow):
-						guitk.BCWizardSetNextButtonEnabled(self.mainWindow, True)
+					if not guitk.BCWizardIsNextButtonEnabled(self.mainWizard):
+						guitk.BCWizardSetNextButtonEnabled(self.mainWizard, True)
 				except SmartClipException as e:
 					self._showStatusBarMessage(str(e))
 					showCriticalMessage(str(e))
 					#guitk.BCSetEnabled(self.pushButtonNext, False)
-					if guitk.BCWizardIsNextButtonEnabled(self.mainWindow):
-						guitk.BCWizardSetNextButtonEnabled(self.mainWindow, False)
+					if guitk.BCWizardIsNextButtonEnabled(self.mainWizard):
+						guitk.BCWizardSetNextButtonEnabled(self.mainWizard, False)
 			else:
-				if not guitk.BCWizardIsNextButtonEnabled(self.mainWindow):
-					guitk.BCWizardSetNextButtonEnabled(self.mainWindow, True)
+				if not guitk.BCWizardIsNextButtonEnabled(self.mainWizard):
+					guitk.BCWizardSetNextButtonEnabled(self.mainWizard, True)
 				#guitk.BCButtonSetText(self.pushButtonNext, 'Next >')
 			
-		elif stepId == 3:
+		elif stepId == 4:
 			
 			if not self.smartClip.beamType().beamsCcsDefined:
 				try:
@@ -208,19 +227,37 @@ class SmartClipDialog(object):
 					self.pageContainer.updateCurrentWidgetInfo()
 					
 					#guitk.BCButtonSetText(self.pushButtonNext, 'Finish')
-					if not guitk.BCWizardIsNextButtonEnabled(self.mainWindow):
-						guitk.BCWizardSetNextButtonEnabled(self.mainWindow, True)
+					if not guitk.BCWizardIsNextButtonEnabled(self.mainWizard):
+						guitk.BCWizardSetNextButtonEnabled(self.mainWizard, True)
 				except SmartClipException as e:
 					self._showStatusBarMessage(str(e))
 					showCriticalMessage(str(e))					
 					#guitk.BCSetEnabled(self.pushButtonNext, False)
-					if guitk.BCWizardIsNextButtonEnabled(self.mainWindow):
-						guitk.BCWizardSetNextButtonEnabled(self.mainWindow, False)
+					if guitk.BCWizardIsNextButtonEnabled(self.mainWizard):
+						guitk.BCWizardSetNextButtonEnabled(self.mainWizard, False)
 			else:
-				if not guitk.BCWizardIsNextButtonEnabled(self.mainWindow):
-					guitk.BCWizardSetNextButtonEnabled(self.mainWindow, True)
+				if not guitk.BCWizardIsNextButtonEnabled(self.mainWizard):
+					guitk.BCWizardSetNextButtonEnabled(self.mainWizard, True)
 				#guitk.BCButtonSetText(self.pushButtonNext, 'Finish')
-					
+	
+	#-------------------------------------------------------------------------
+
+	def stepFinished(self):
+	
+		self.checkNextState()
+	
+	#-------------------------------------------------------------------------
+
+	def checkNextState(self):
+	
+		currentId = guitk.BCWizardCurrentIndex(self.mainWizard)
+		currentPage = self.pages[currentId]
+				
+		if currentPage.isFinished:
+			guitk.BCWizardSetNextButtonEnabled(self.mainWizard, True)
+		else:	
+			guitk.BCWizardSetNextButtonEnabled(self.mainWizard, False)
+			
 	#-------------------------------------------------------------------------
 	
 	def setTypeGeom(self, index, geomType):
@@ -279,7 +316,11 @@ def showCriticalMessage(message):
 	
 #	print(message)
 	#guitk.UserWarning(message)
-	guitk.UserError(message)
+#	guitk.UserError(message)
+	messageWindow = guitk.BCMessageWindowCreate(guitk.constants.BCMessageBoxCritical, message, True)
+	guitk.BCMessageWindowSetRejectButtonVisible(messageWindow, False)
+	guitk.BCMessageWindowExecute(messageWindow)
+	
 		
 # ==============================================================================
 
@@ -324,7 +365,7 @@ def main():
 
 # ==============================================================================
 
-if __name__ == '__main__':
+if __name__ == '__main__' and DEBUG :
 	
 	main()
 

@@ -9,7 +9,7 @@ except ImportError as e:
 
 # ==============================================================================
 
-PATH_BIN = os.path.dirname(os.path.realpath(__file__))
+PATH_BIN = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
 PATH_INI = os.path.normpath(os.path.join(PATH_BIN,'..', 'ini'))
 PATH_RES = os.path.normpath(os.path.join(PATH_BIN, '..', 'res'))
 

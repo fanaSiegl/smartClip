@@ -9,9 +9,10 @@ from ansa import base, constants, guitk
 
 # ==============================================================================
 
-PATH_BIN = os.path.dirname(os.path.realpath(__file__))
+PATH_SELF = os.path.dirname(os.path.realpath(__file__))
 
-ansa.ImportCode(os.path.join(PATH_BIN, 'util.py'))
+ansa.ImportCode(os.path.join(PATH_SELF, 'util.py'))
+ansa.ImportCode(os.path.join(PATH_SELF, 'base_items.py'))
 
 # ==============================================================================
 
@@ -66,6 +67,7 @@ class SmartClip(object):
 		
 		self._geomType = None
 		self._beamType = None
+		self.coordSystem = base_items.ClipCoorSys(self)
 		
 		self.clipEntities= dict()
 				
@@ -189,7 +191,7 @@ class StandardGeomType(metaclass=GeomTypeMetaClass):
 		self.parentClip = parentClip
 		
 		self.selectedCon = None
-		self.coordSystem = None
+		self.coordSystem = self.parentClip.coordSystem
 		self.clipEntities= self.parentClip.clipEntities
 		
 		self.stopDistanceMeasurements = dict()
@@ -349,7 +351,7 @@ class StandardGeomType(metaclass=GeomTypeMetaClass):
 			return angle*180/3.14
 				
 		sortedFaces = list(sortEntities(faces, sortFacesFcn, angleLimit))
-
+				
 		if len(sortedFaces) == 0:
 			angleLimit+=10
 			print('Increasing angle value for face searching: %s' % angleLimit)
@@ -482,9 +484,10 @@ class StandardGeomType(metaclass=GeomTypeMetaClass):
 		self.oppositeProjectionVector = -1*np.array(self.largeFaceNormal)
 		
 		self.middlePointCoords = getConMiddle(self.selectedCon)
-		
+				
 		# find opposite face
 		oppositeFaces = self._getAngleSortedFaces(self.clipFaces, self.oppositeProjectionVector)
+				
 		oppositeFace, oppositeFacePointCoords = self._getPointProjectionCoords(
 			oppositeFaces, self.middlePointCoords, self.oppositeProjectionVector, searchedFaceName='z upper face - clip side')
 		
@@ -687,17 +690,34 @@ class StandardGeomType(metaclass=GeomTypeMetaClass):
 	
 	#-------------------------------------------------------------------------
 
+	def updateVectors(self):
+		
+		''' Update base vectors according to the coordinate system. '''
+		
+		self.largeFaceNormal = self.coordSystem.vectorZ
+		
+		self.sideProjectionVectorPlus = self.coordSystem.vectorX
+		self.sideProjectionVectorMinus = -1*np.array(self.coordSystem.vectorX)
+		
+		# this is correct orthogonal vector that a small face should have in case of 90 degrees...
+		self.smallFaceOrthoVector = self.coordSystem.vectorY
+		self.oppositeProjectionVector = -1*np.array(self.largeFaceNormal)
+	
+	#-------------------------------------------------------------------------
+
 	def createCoorSystem(self):
 		
-		xAxisPointCoords = np.array(self.centerCoordPointCoords)+np.array(self.sideProjectionVectorPlus)
-		zAxisPointCoords = np.array(self.centerCoordPointCoords)+np.array(self.largeFaceNormal)
+		self.coordSystem.create()
 		
-		# create coordinate system
-		vals = {'Name': 'CLIP_COOR_SYS',
-			'A1':  self.centerCoordPointCoords[0], 'A2':  self.centerCoordPointCoords[1], 'A3':  self.centerCoordPointCoords[2],
-			'B1':  zAxisPointCoords[0], 'B2':  zAxisPointCoords[1], 'B3':  zAxisPointCoords[2],
-			'C1':  xAxisPointCoords[0], 'C2':  xAxisPointCoords[1], 'C3':  xAxisPointCoords[2]}
-		self.coordSystem = base.CreateEntity(constants.ABAQUS, "ORIENTATION_R", vals)
+#		xAxisPointCoords = np.array(self.centerCoordPointCoords)+np.array(self.sideProjectionVectorPlus)
+#		zAxisPointCoords = np.array(self.centerCoordPointCoords)+np.array(self.largeFaceNormal)
+#		
+#		# create coordinate system
+#		vals = {'Name': 'CLIP_COOR_SYS',
+#			'A1':  self.centerCoordPointCoords[0], 'A2':  self.centerCoordPointCoords[1], 'A3':  self.centerCoordPointCoords[2],
+#			'B1':  zAxisPointCoords[0], 'B2':  zAxisPointCoords[1], 'B3':  zAxisPointCoords[2],
+#			'C1':  xAxisPointCoords[0], 'C2':  xAxisPointCoords[1], 'C3':  xAxisPointCoords[2]}
+#		self.coordSystem = base.CreateEntity(constants.ABAQUS, "ORIENTATION_R", vals)
 
 	#-------------------------------------------------------------------------
 	
@@ -929,7 +949,7 @@ class AudiBeamType(metaclass=BeamTypeMetaClass):
 		# create a connector section
 		vals = {'Name': 'CONNECTOR_SECTION',
 			 'MID': self.connectorBehavior._id,
-			'COMPONENT_1': 'CARDAN', 'COMPONENT_2':  'CARTESIAN', 'ORIENT_1': self.coordSystem._id,
+			'COMPONENT_1': 'CARDAN', 'COMPONENT_2':  'CARTESIAN', 'ORIENT_1': self.coordSystem.id,
 			}
 		self.connectorSection = base.CreateEntity(constants.ABAQUS, "CONNECTOR_SECTION", vals)
 		
@@ -1250,7 +1270,7 @@ class SkodaBeamType(AudiBeamType):
 		# create a connector section
 		vals = {'Name': 'CONNECTOR_SECTION_C1_C2',
 			 'MID': self.connectorBehavior._id,
-			'COMPONENT_1': 'CARDAN', 'COMPONENT_2':  'CARTESIAN', 'ORIENT_1': self.coordSystem._id,
+			'COMPONENT_1': 'CARDAN', 'COMPONENT_2':  'CARTESIAN', 'ORIENT_1': self.coordSystem.id,
 			}
 		self.connectorSection = base.CreateEntity(constants.ABAQUS, "CONNECTOR_SECTION", vals)
 				
@@ -1284,7 +1304,7 @@ class SkodaBeamType(AudiBeamType):
 		# create a connector section for CONNECTOR C3
 		vals = {'Name': 'CONNECTOR_SECTION_C3',
 			 'MID': self.connectorBehaviorC3._id,
-			'COMPONENT_1': 'CARDAN', 'COMPONENT_2':  'CARTESIAN', 'ORIENT_1': self.coordSystem._id,
+			'COMPONENT_1': 'CARDAN', 'COMPONENT_2':  'CARTESIAN', 'ORIENT_1': self.coordSystem.id,
 			}
 		self.connectorSectionC3 = base.CreateEntity(constants.ABAQUS, "CONNECTOR_SECTION", vals)
 		

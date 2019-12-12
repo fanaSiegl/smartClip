@@ -8,10 +8,11 @@ from ansa import base, guitk, constants
 
 # ==============================================================================
 
-PATH_BIN = os.path.dirname(os.path.realpath(__file__))
+PATH_SELF = os.path.dirname(os.path.realpath(__file__))
+PATH_BIN = os.path.dirname(PATH_SELF)
 
-ansa.ImportCode(os.path.join(PATH_BIN, 'util.py'))
-ansa.ImportCode(os.path.join(PATH_BIN, 'comp_items.py'))
+ansa.ImportCode(os.path.join(PATH_BIN, 'domain', 'util.py'))
+ansa.ImportCode(os.path.join(PATH_BIN, 'domain', 'comp_items.py'))
 
 # ==============================================================================
 
@@ -79,7 +80,7 @@ class StackWidgetPage(object):
 		self.parent =parent
 		self.label = label
 		self.description = description
-		self.parentWidget = self.parent.mainWindow
+		self.parentWidget = self.parent.mainWizard
 		
 		self.infoAttributeNames = list()
 		
