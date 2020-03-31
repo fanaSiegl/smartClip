@@ -1,6 +1,7 @@
 
 import os
 import sys
+import collections
 
 try:
     import configparser
@@ -32,4 +33,30 @@ def getVersionInfo():
 
 	return revision, modifiedBy, lastModified
 
+#===============================================================================
+
+def registerClass(cls):
+    
+    def registerToContainer(container, listIdName='ID'):
+        
+        if type(container) is dict or type(container) is collections.OrderedDict:
+            container[cls.NAME] = cls
+        elif type(cls.container) is list:
+            
+            if hasattr(cls, listIdName):
+                itemId = getattr(cls, listIdName)
+                if itemId >= len(container):
+                    container.extend((itemId - len(container) + 1)*[None])
+                container[itemId] = cls
+            else:
+                container.append(cls)
+    
+    registerToContainer(cls.container)
+    
+    # register to subcontainer
+    if hasattr(cls, 'subcontainer'):
+        registerToContainer(cls.subcontainer, 'SUBID')
+    
+    return cls
+    
 #=============================================================================

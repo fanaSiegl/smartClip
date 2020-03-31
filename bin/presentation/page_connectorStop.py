@@ -42,6 +42,11 @@ class ConnectorStopPage(base_widgets.BasePage):
 		if not self.isDefined:
 			guitk.BCSetApplicationOverrideCursor(guitk.constants.BCCursorWait)
 			
+			if not self.smartClip().beamType().hasStopDistance():
+				self.optionsEnabled(False)
+			else:
+				self.optionsEnabled(True)
+				
 			self.smartClip().geomType().setStopDistances(hideMeasurements=False)
 			
 			guitk.BCRestoreApplicationOverrideCursor()
@@ -55,10 +60,7 @@ class ConnectorStopPage(base_widgets.BasePage):
 		
 		''' Once deactivated is should not be possible to modify values '''
 		
-		for selectButton in self.selectButtons.values():
-			guitk.BCSetEnabled(selectButton, False)
-		for editButton in self.editButtons.values():
-			guitk.BCSetEnabled(editButton, False)		
+		self.optionsEnabled(False)
 			
 	#-------------------------------------------------------------------------
 			
@@ -98,7 +100,7 @@ class ConnectorStopPage(base_widgets.BasePage):
 	def redefineStopDistance(self, buttonWidget, stopDistanceName):
 		
 		try:
-			self.smartClip().redefineStopDistance(stopDistanceName)
+			self.smartClip().geomType().redefineStopDistance(stopDistanceName)
 		except Exception as e:
 			self.showMessage(str(e), critical=True)
 		
@@ -120,7 +122,7 @@ class ConnectorStopPage(base_widgets.BasePage):
 			return
 		
 		try:
-			self.smartClip().editStopDistance(stopDistanceName, value)
+			self.smartClip().geomType().editStopDistance(stopDistanceName, value)
 		except Exception as e:
 			self.showMessage(str(e), critical=True)
 		
@@ -136,5 +138,13 @@ class ConnectorStopPage(base_widgets.BasePage):
 		self._setInfoAttributeValue('yUp', self.smartClip().geomType().yUp, style='<p style="color:red">%s</p>')
 		self._setInfoAttributeValue('zLow', self.smartClip().geomType().zLow, style='<p style="color:blue">%s</p>')
 		self._setInfoAttributeValue('zUp', self.smartClip().geomType().zUp, style='<p style="color:red">%s</p>')
-		
 	
+	#-------------------------------------------------------------------------
+    
+	def optionsEnabled(self, value):
+		
+		for selectButton in self.selectButtons.values():
+			guitk.BCSetEnabled(selectButton, value)
+		for editButton in self.editButtons.values():
+			guitk.BCSetEnabled(editButton, value)	
+		

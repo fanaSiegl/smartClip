@@ -88,7 +88,7 @@ def setWaitCursor(method, *args):
 			print(format_exc())
 			base.BlockRedraws(False)
 			base.RedrawAll()
-			parent.showMessage(str(e), critical=True)
+			SmartClipDialog.showMessage(str(e), critical=True)
 			
 			guitk.BCRestoreApplicationOverrideCursor()
 
@@ -229,8 +229,8 @@ class SmartClipDialog(object):
 		guitk.BCStatusBarTimedMessage(self.statusBar, message, 2000)
 	
 	#-------------------------------------------------------------------------
-
-	def showMessage(self, message, critical=False):
+	@staticmethod
+	def showMessage(message, critical=False):
 		
 		if critical:
 			messageWindow = guitk.BCMessageWindowCreate(guitk.constants.BCMessageBoxCritical, message, True)
@@ -242,7 +242,7 @@ class SmartClipDialog(object):
 		guitk.BCMessageWindowExecute(messageWindow)
 	
 	#-------------------------------------------------------------------------
-
+	@staticmethod
 	def showQuestion(message):
 	
 		messageWindow = guitk.BCMessageWindowCreate(guitk.constants.BCMessageBoxQuestion, message, True)

@@ -47,7 +47,7 @@ class SelectClipTypePage(base_widgets.BasePage):
 		
 		# clip type selector
 		label = guitk.BCLabelCreate(self.contentLayout, 'Select CLIP geometrical type')
-		clipTypeOptions = list(comp_items.clipGeomTypeRegistry.keys())
+		clipTypeOptions = list(comp_items.CLIP_GEOM_TYPES.keys())
 		self.clipGeomTypeComboBox = guitk.BCComboBoxCreate(self.contentLayout, clipTypeOptions)
 		
 		guitk.BCGridLayoutAddWidget(self.contentLayout, label, 0, 0, guitk.constants.BCAlignLeft)
@@ -58,7 +58,7 @@ class SelectClipTypePage(base_widgets.BasePage):
 		
 		# manufacturer selector
 		label = guitk.BCLabelCreate(self.contentLayout, 'Select CLIP beam type')
-		clipTypeOptions = list(comp_items.clipBeamTypeRegistry.keys())
+		clipTypeOptions = list(comp_items.CLIP_BEAM_TYPES.keys())
 		self.clipBeamTypeComboBox = guitk.BCComboBoxCreate(self.contentLayout, clipTypeOptions)
 		
 		guitk.BCGridLayoutAddWidget(self.contentLayout, label, 2, 0, guitk.constants.BCAlignLeft)

@@ -17,6 +17,11 @@ ansa.ImportCode(os.path.join(PATH_SELF, 'base_items.py'))
 
 # ==============================================================================
 
+CLIP_GEOM_TYPES = collections.OrderedDict()
+CLIP_BEAM_TYPES = collections.OrderedDict()
+
+# ==============================================================================
+
 def getAnsaVersion():
 	
 	currentVersion = constants.app_version
@@ -25,26 +30,22 @@ def getAnsaVersion():
 
 # ==============================================================================
 
-clipBeamTypeRegistry = collections.OrderedDict()
-   
-class BeamTypeMetaClass(type):
-    def __new__(cls, clsname, bases, attrs):
-        newclass = super(BeamTypeMetaClass, cls).__new__(cls, clsname, bases, attrs)
-        
-        clipBeamTypeRegistry[newclass.TYPE_NAME] = newclass
-        return newclass
-
+class BaseGeomType(object):
+	container = CLIP_GEOM_TYPES
+	NAME = ''
+	
 # ==============================================================================
 
-clipGeomTypeRegistry = collections.OrderedDict()
-   
-class GeomTypeMetaClass(type):
-    def __new__(cls, clsname, bases, attrs):
-        newclass = super(GeomTypeMetaClass, cls).__new__(cls, clsname, bases, attrs)
-        
-        clipGeomTypeRegistry[newclass.TYPE_NAME] = newclass
-        return newclass
-        
+class BaseBeamType(object):
+	container = CLIP_BEAM_TYPES
+	NAME = ''
+	
+	#-------------------------------------------------------------------------
+	
+	def hasStopDistance(self):
+		
+			return True
+		
 # ==============================================================================
 
 COLOURS = {
@@ -74,21 +75,23 @@ class SmartClip(object):
 		# set default clip types
 		self.setGeomType(geomType)
 		self.setBeamType(beamType)
+		
+		self.clipAreaShells = list()
 	
 	#-------------------------------------------------------------------------
-    
-	def __getattr__(self, name):
-		
-		''' Try to search for attribute also in the parent clip'''
-		
-		if hasattr(self.geomType(), name):
-			return getattr(self.geomType(), name)
-		elif hasattr(self.beamType(), name):
-			return getattr(self.beamType(), name)
-		elif hasattr(self, name):
-			return getattr(self, name)
-		else:
-			raise AttributeError( "'%s object has no attribute '%s'" % (self.__class__.__name__, name))
+#
+#	def __getattr__(self, name):
+#		
+#		''' Try to search for attribute also in the parent clip'''
+#		
+#		if hasattr(self.geomType(), name):
+#			return getattr(self.geomType(), name)
+#		elif hasattr(self.beamType(), name):
+#			return getattr(self.beamType(), name)
+#		elif hasattr(self, name):
+#			return getattr(self, name)
+#		else:
+#			raise AttributeError( "'%s object has no attribute '%s'" % (self.__class__.__name__, name))
 			
 	#-------------------------------------------------------------------------
 	
@@ -105,7 +108,7 @@ class SmartClip(object):
 	def setBeamType(self, beamType):
 			
 		try:
-			clipBeamTypeClass = clipBeamTypeRegistry[beamType]
+			clipBeamTypeClass = CLIP_BEAM_TYPES[beamType]
 			self._beamType = clipBeamTypeClass(self)
 			return
 		except KeyError as e:
@@ -119,7 +122,7 @@ class SmartClip(object):
 	def setGeomType(self, geomType):
 			
 		try:
-			clipGeomTypeClass = clipGeomTypeRegistry[geomType]
+			clipGeomTypeClass = CLIP_GEOM_TYPES[geomType]
 			self._geomType = clipGeomTypeClass(self)
 			return
 		except KeyError as e:
@@ -170,10 +173,10 @@ class SmartClip(object):
 		cls.coordsDrawState = None
 	
 # ==============================================================================
-
-class StandardGeomType(metaclass=GeomTypeMetaClass):
+@util.registerClass
+class StandardGeomType(BaseGeomType):
 	
-	TYPE_NAME = 'Standard'
+	NAME = 'Standard'
 	INFO ='Standard geometrical clip type.'
 	ICON = os.path.join(util.PATH_RES, 'icons', 'clip_geom_standard.png')
 	
@@ -376,7 +379,7 @@ class StandardGeomType(metaclass=GeomTypeMetaClass):
 		for entity in nodes:
 			#if entity._type == Types.NODE:
 			nodeCoords = [getEntityProperty(entity, 'X'), getEntityProperty(entity, 'Y'), getEntityProperty(entity, 'Z')]
-			nodeCenterDistance = np.linalg.norm(np.array(self.centerCoordPointCoords) - np.array(nodeCoords))
+			nodeCenterDistance = np.linalg.norm(np.array(self.parentClip.geomType().centerCoordPointCoords) - np.array(nodeCoords))
 			# check node distance			
 			if nodeCenterDistance < self.CLIP_NODE_DIST:			
 				facesNodeCoords.append(nodeCoords)
@@ -460,7 +463,8 @@ class StandardGeomType(metaclass=GeomTypeMetaClass):
 		for neighbourFaceProperty in self.neighbourFaceProperties:
 			if neighbourFaceProperty in visibleProps:
 				visibleProps.remove(neighbourFaceProperty)
-		self.clipAreaShells = base.CollectEntities(constants.ABAQUS, visibleProps, "SHELL")#, filter_visible=True)
+		self.parentClip.clipAreaShells = base.CollectEntities(constants.ABAQUS, visibleProps, "SHELL")#, filter_visible=True)
+		
 		#base.SetViewButton({"FE-Mode":"off"})
 		
 		# guiding face normals
@@ -495,6 +499,9 @@ class StandardGeomType(metaclass=GeomTypeMetaClass):
 	#-------------------------------------------------------------------------
 
 	def setStopDistances(self, hideMeasurements=True):
+		
+		if not self.parentClip.beamType().hasStopDistance():
+			return
 		
 		stopDistanceMethods = [self.findZlowDist, self.findZupDist, self.findXupDist, self.findXlowDist,
 			self.findYupDist, self.findYlowDist]
@@ -706,21 +713,11 @@ class StandardGeomType(metaclass=GeomTypeMetaClass):
 		
 		self.coordSystem.create()
 		
-#		xAxisPointCoords = np.array(self.centerCoordPointCoords)+np.array(self.sideProjectionVectorPlus)
-#		zAxisPointCoords = np.array(self.centerCoordPointCoords)+np.array(self.largeFaceNormal)
-#		
-#		# create coordinate system
-#		vals = {'Name': 'CLIP_COOR_SYS',
-#			'A1':  self.centerCoordPointCoords[0], 'A2':  self.centerCoordPointCoords[1], 'A3':  self.centerCoordPointCoords[2],
-#			'B1':  zAxisPointCoords[0], 'B2':  zAxisPointCoords[1], 'B3':  zAxisPointCoords[2],
-#			'C1':  xAxisPointCoords[0], 'C2':  xAxisPointCoords[1], 'C3':  xAxisPointCoords[2]}
-#		self.coordSystem = base.CreateEntity(constants.ABAQUS, "ORIENTATION_R", vals)
-
 	#-------------------------------------------------------------------------
 	
 	def createSymmetricalCoorSys(self):
 		
-		centerPointCoords =  np.array([1,-1,1])*(np.array(self.parentClip.centerCoordPointCoords))
+		centerPointCoords =  np.array([1,-1,1])*(np.array(self.centerCoordPointCoords))
 		xAxisPointCoords = np.array(centerPointCoords)-np.array([1,-1,1])*np.array(self.sideProjectionVectorPlus)
 		zAxisPointCoords = np.array(centerPointCoords)+np.array([1,-1,1])*np.array(self.largeFaceNormal)
 		
@@ -732,10 +729,10 @@ class StandardGeomType(metaclass=GeomTypeMetaClass):
 		self.symmCoordSystem = base.CreateEntity(constants.ABAQUS, "ORIENTATION_R", vals)
 
 # ==============================================================================
-
+@util.registerClass
 class ReversedGeomType(StandardGeomType):
 	
-	TYPE_NAME = 'Reversed'
+	NAME = 'Reversed'
 	INFO ='Reversed geometrical clip type.'
 	ICON = os.path.join(util.PATH_RES, 'icons', 'clip_geom_reversed.png')
 	
@@ -762,18 +759,18 @@ class ReversedGeomType(StandardGeomType):
 				
 
 # ==============================================================================
-
+@util.registerClass
 class LockGeomType(ReversedGeomType):
 	
-	TYPE_NAME = 'Lock'
+	NAME = 'Lock'
 	INFO ='Lock-like geometrical clip type.'
 	ICON = os.path.join(util.PATH_RES, 'icons', 'clip_geom_lock.png')
 
 # ==============================================================================
-
+@util.registerClass
 class FlatGeomType(StandardGeomType):
 	
-	TYPE_NAME = 'Flat'
+	NAME = 'Flat'
 	INFO ='Flat geometrical clip type without clip. Requires: 1. selection of the guiding CON and 2. top face. Guiding CON must be created by cutting the front face if not present.'
 	ICON = os.path.join(util.PATH_RES, 'icons', 'clip_geom_flat.png')
 	
@@ -830,10 +827,10 @@ class FlatGeomType(StandardGeomType):
 		
 		
 # ==============================================================================
-
-class AudiBeamType(metaclass=BeamTypeMetaClass):
+@util.registerClass
+class AudiBeamType(BaseBeamType):
 	
-	TYPE_NAME = 'AUDI'
+	NAME = 'AUDI'
 	INFO ='AUDI CONNECTOR type clip consists of 1 connector element and beams joining connector with a clip and its contra side.'
 	ICON = os.path.join(util.PATH_RES, 'icons', 'clip_beam_audi.png')
 	
@@ -855,26 +852,29 @@ class AudiBeamType(metaclass=BeamTypeMetaClass):
 			
 	#-------------------------------------------------------------------------
     
-	def __getattr__(self, name):
-		
-		''' Try to search for attribute also in the parent clip'''
-		
-		if hasattr(self.parentClip.geomType(), name):
-			return getattr(self.parentClip.geomType(), name)
-		elif hasattr(self, name):
-			return getattr(self, name)
-		else:
-			raise AttributeError( "'%s object has no attribute '%s'" % (self.__class__.__name__, name))
-	
+#	def __getattr__(self, name):
+#		
+#		''' Try to search for attribute also in the parent clip'''
+#					
+#		if hasattr(self.parentClip.geomType(), name):
+#			return getattr(self.parentClip.geomType(), name)
+#		elif hasattr(self, name):
+#			return getattr(self, name)
+#		else:
+#			raise AttributeError( "'%s object has no attribute '%s'" % (self.__class__.__name__, name))
+				
 	#-------------------------------------------------------------------------
 
 	def createNodesForConnector(self):
-				
+						
+		centerCoordPointCoords = self.parentClip.geomType().centerCoordPointCoords
+		largeFaceNormal = self.parentClip.geomType().largeFaceNormal
+		
 		# create nodes for entities		
-		connectorNodeCoords = self.centerCoordPointCoords+0.5*self.CONNECTOR_LENGTH*np.array(self.largeFaceNormal)
-	
+		connectorNodeCoords = centerCoordPointCoords+0.5*self.CONNECTOR_LENGTH*np.array(largeFaceNormal)
+			
 		self.connectingBeamsCenterNode1 = createNode(
-			self.centerCoordPointCoords-0.5*self.CONNECTOR_LENGTH*np.array(self.largeFaceNormal))
+			centerCoordPointCoords-0.5*self.CONNECTOR_LENGTH*np.array(largeFaceNormal))
 		self.connectingBeamsCenterNode2 = createNode(connectorNodeCoords)
 	
 	#-------------------------------------------------------------------------
@@ -930,9 +930,9 @@ class AudiBeamType(metaclass=BeamTypeMetaClass):
 	
 		# create connector stop
 		vals = {'Name': 'CONNECTOR STOP',
-			 'COMP (1)': 'YES', 'Low.Lim.(1)': self.xLow, 'Up.Lim.(1)': self.xUp, 
-			 'COMP (2)': 'YES', 'Low.Lim.(2)': self.yLow, 'Up.Lim.(2)': self.yUp, 
-			 'COMP (3)': 'YES', 'Low.Lim.(3)': self.zLow, 'Up.Lim.(3)': self.zUp, 
+			 'COMP (1)': 'YES', 'Low.Lim.(1)': self.parentClip.geomType().xLow, 'Up.Lim.(1)': self.parentClip.geomType().xUp, 
+			 'COMP (2)': 'YES', 'Low.Lim.(2)': self.parentClip.geomType().yLow, 'Up.Lim.(2)': self.parentClip.geomType().yUp, 
+			 'COMP (3)': 'YES', 'Low.Lim.(3)': self.parentClip.geomType().zLow, 'Up.Lim.(3)': self.parentClip.geomType().zUp, 
 			}
 		self.connectorStop = base.CreateEntity(constants.ABAQUS, "CONNECTOR_STOP", vals)
 		
@@ -946,7 +946,7 @@ class AudiBeamType(metaclass=BeamTypeMetaClass):
 		# create a connector section
 		vals = {'Name': 'CONNECTOR_SECTION',
 			 'MID': self.connectorBehavior._id,
-			'COMPONENT_1': 'CARDAN', 'COMPONENT_2':  'CARTESIAN', 'ORIENT_1': self.coordSystem.id,
+			'COMPONENT_1': 'CARDAN', 'COMPONENT_2':  'CARTESIAN', 'ORIENT_1': self.parentClip.geomType().coordSystem.id,
 			}
 		self.connectorSection = base.CreateEntity(constants.ABAQUS, "CONNECTOR_SECTION", vals)
 		
@@ -978,6 +978,9 @@ class AudiBeamType(metaclass=BeamTypeMetaClass):
     
 	def createBeamsConnectorClipContraSide(self):
 		
+		# parent attributes 
+		largeFaceNormal = self.parentClip.geomType().largeFaceNormal
+		
 		# find nodes for initial selection
 		#searchEntities = base.CollectEntities(constants.ABAQUS, None, "SHELL")
 		
@@ -986,7 +989,7 @@ class AudiBeamType(metaclass=BeamTypeMetaClass):
 			# some points may not be defined because of non standard clip shape
 			try:
 				nearestElements = findNearestElements(
-					np.array(getHotPointCoords(self.centerCoordNode)) + 3*np.array(self.largeFaceNormal), self.clipAreaShells)
+					np.array(getHotPointCoords(self.parentClip.geomType().centerCoordNode)) + 3*np.array(largeFaceNormal), self.parentClip.clipAreaShells)
 			except Exception as e:
 				print(str(e))
 				nearestElements = list()
@@ -1075,17 +1078,25 @@ class AudiBeamType(metaclass=BeamTypeMetaClass):
     
 	def createBeamsConnectorClipSide(self):
 		
+		# parent attributes
+		centerCoordPointCoords = self.parentClip.geomType().centerCoordPointCoords
+		largeFaceNormal = self.parentClip.geomType().largeFaceNormal
+		sideProjectionVectorPlus = self.parentClip.geomType().sideProjectionVectorPlus
+		sideProjectionVectorMinus = self.parentClip.geomType().sideProjectionVectorMinus
+		smallFaceOrthoVector = self.parentClip.geomType().smallFaceOrthoVector
+		centerCoordNode = self.parentClip.geomType().centerCoordNode
+		
 		# find nodes for initial selection
-		searchEntities = self.clipAreaShells#base.CollectEntities(constants.ABAQUS, None, "SHELL")
+		searchEntities = self.parentClip.clipAreaShells#base.CollectEntities(constants.ABAQUS, None, "SHELL")
 		
 		# if no elements were selected before try to find the nearest ones
 		if len(self.selectedElementsBeamCs) == 0:
 			nearestElements = list()
 			# some points may not be defined because of non standard clip shape
 			try:
-				coords = [np.array(getHotPointCoords(self.centerCoordNode))]
-				coords.append(np.array(getHotPointCoords(self.centerCoordNode)) + 4*np.array(self.sideProjectionVectorPlus))
-				coords.append(np.array(getHotPointCoords(self.centerCoordNode)) + 4*np.array(self.sideProjectionVectorMinus))
+				coords = [np.array(getHotPointCoords(centerCoordNode))]
+				coords.append(np.array(getHotPointCoords(centerCoordNode)) + 4*np.array(sideProjectionVectorPlus))
+				coords.append(np.array(getHotPointCoords(centerCoordNode)) + 4*np.array(sideProjectionVectorMinus))
 				for coord in coords:
 					nearestElements.extend(findNearestElements(coord, searchEntities))
 			except Exception as e:
@@ -1180,10 +1191,10 @@ class AudiBeamType(metaclass=BeamTypeMetaClass):
 		
 
 # ==============================================================================
-
+@util.registerClass
 class SkodaBeamType(AudiBeamType):
 	
-	TYPE_NAME = 'SKODA'
+	NAME = 'SKODA'
 	INFO = 'SKODA CONNECTOR type clip consists of 3 connectors joined together with steel beams of very low density and beams joining connector with a clip and its contra side.'
 	ICON = os.path.join(util.PATH_RES, 'icons', 'clip_beam_skoda.png')
 	
@@ -1194,37 +1205,43 @@ class SkodaBeamType(AudiBeamType):
 	#-------------------------------------------------------------------------
 	
 	def createNodesForConnector(self):
-				
+		
+		# parent attributes 		
+		centerCoordPointCoords = self.parentClip.geomType().centerCoordPointCoords
+		largeFaceNormal = self.parentClip.geomType().largeFaceNormal
+		sideProjectionVectorPlus = self.parentClip.geomType().sideProjectionVectorPlus
+		smallFaceOrthoVector = self.parentClip.geomType().smallFaceOrthoVector
+		
 		# create nodes for entities
 		#zVector = self.middlePointCoords - self.centerCoordPointCoords
 		#zVectorNorm = zVector/ np.linalg.norm(zVector)
-		zVectorNorm = np.array(self.largeFaceNormal)
+		zVectorNorm = np.array(largeFaceNormal)
 		
-		xVectorNorm = self.sideProjectionVectorPlus/ np.linalg.norm(self.sideProjectionVectorPlus)
+		xVectorNorm = sideProjectionVectorPlus/ np.linalg.norm(sideProjectionVectorPlus)
 				
 		xMove = self.CONNECTOR_DISTANCE*xVectorNorm
-		yMove = -1*self.CONNECTOR_DISTANCE*np.array(self.smallFaceOrthoVector)#smallFaceNormal)
+		yMove = -1*self.CONNECTOR_DISTANCE*np.array(smallFaceOrthoVector)#smallFaceNormal)
 		zMove = self.CONNECTOR_LENGTH*zVectorNorm
 				
 		# connector C1
-		con1Node1Coords = self.centerCoordPointCoords - xMove - 0.5*zMove
-		con1Node2Coords = self.centerCoordPointCoords - xMove + 0.5*zMove
+		con1Node1Coords = centerCoordPointCoords - xMove - 0.5*zMove
+		con1Node2Coords = centerCoordPointCoords - xMove + 0.5*zMove
 		
 		self.con1Node1 =createNode(con1Node1Coords)
 		self.con1Node2 = createNode(con1Node2Coords)
 		
 		# connector C2
-		con2Node1Coords = self.centerCoordPointCoords + xMove - 0.5*zMove
-		con2Node2Coords = self.centerCoordPointCoords + xMove + 0.5*zMove
+		con2Node1Coords = centerCoordPointCoords + xMove - 0.5*zMove
+		con2Node2Coords = centerCoordPointCoords + xMove + 0.5*zMove
 		
 		self.con2Node1 =createNode(con2Node1Coords)
 		self.con2Node2 = createNode(con2Node2Coords)
 		
 		# connector C3
-		con3Node1Coords = self.centerCoordPointCoords + yMove - 0.5*zMove
-		con3Node2Coords = self.centerCoordPointCoords + yMove + 0.5*zMove
+		con3Node1Coords = centerCoordPointCoords + yMove - 0.5*zMove
+		con3Node2Coords = centerCoordPointCoords + yMove + 0.5*zMove
 		
-		self.centerCoordNode = createNode(self.centerCoordPointCoords)
+		self.centerCoordNode = createNode(centerCoordPointCoords)
 		
 		self.con3Node1 =createNode(con3Node1Coords)
 		self.con3Node2 =createNode(con3Node2Coords)
@@ -1251,9 +1268,9 @@ class SkodaBeamType(AudiBeamType):
 	
 		# create connector stop
 		vals = {'Name': 'CONNECTOR_STOP_C1_C2',
-			 'COMP (1)': 'YES', 'Low.Lim.(1)': self.xLow, 'Up.Lim.(1)': self.xUp, 
-			 'COMP (2)': 'YES', 'Low.Lim.(2)': self.yLow, 'Up.Lim.(2)': self.yUp, 
-			 'COMP (3)': 'YES', 'Low.Lim.(3)': self.zLow, 'Up.Lim.(3)': self.zUp, 
+			 'COMP (1)': 'YES', 'Low.Lim.(1)': self.parentClip.geomType().xLow, 'Up.Lim.(1)': self.parentClip.geomType().xUp, 
+			 'COMP (2)': 'YES', 'Low.Lim.(2)': self.parentClip.geomType().yLow, 'Up.Lim.(2)': self.parentClip.geomType().yUp, 
+			 'COMP (3)': 'YES', 'Low.Lim.(3)': self.parentClip.geomType().zLow, 'Up.Lim.(3)': self.parentClip.geomType().zUp, 
 			}
 		self.connectorStop = base.CreateEntity(constants.ABAQUS, "CONNECTOR_STOP", vals)
 		
@@ -1267,7 +1284,7 @@ class SkodaBeamType(AudiBeamType):
 		# create a connector section
 		vals = {'Name': 'CONNECTOR_SECTION_C1_C2',
 			 'MID': self.connectorBehavior._id,
-			'COMPONENT_1': 'CARDAN', 'COMPONENT_2':  'CARTESIAN', 'ORIENT_1': self.coordSystem.id,
+			'COMPONENT_1': 'CARDAN', 'COMPONENT_2':  'CARTESIAN', 'ORIENT_1': self.parentClip.geomType().coordSystem.id,
 			}
 		self.connectorSection = base.CreateEntity(constants.ABAQUS, "CONNECTOR_SECTION", vals)
 				
@@ -1287,7 +1304,7 @@ class SkodaBeamType(AudiBeamType):
 		
 		# create connector stop for CONNECTOR C3
 		vals = {'Name': 'CONNECTOR_STOP_C3',
-			 'COMP (3)': 'YES', 'Low.Lim.(3)': self.zLow, 'Up.Lim.(3)': self.zUp, 
+			 'COMP (3)': 'YES', 'Low.Lim.(3)': self.parentClip.geomType().zLow, 'Up.Lim.(3)': self.parentClip.geomType().zUp, 
 			}
 		self.connectorStopC3 = base.CreateEntity(constants.ABAQUS, "CONNECTOR_STOP", vals)
 		
@@ -1301,7 +1318,7 @@ class SkodaBeamType(AudiBeamType):
 		# create a connector section for CONNECTOR C3
 		vals = {'Name': 'CONNECTOR_SECTION_C3',
 			 'MID': self.connectorBehaviorC3._id,
-			'COMPONENT_1': 'CARDAN', 'COMPONENT_2':  'CARTESIAN', 'ORIENT_1': self.coordSystem.id,
+			'COMPONENT_1': 'CARDAN', 'COMPONENT_2':  'CARTESIAN', 'ORIENT_1': self.parentClip.geomType().coordSystem.id,
 			}
 		self.connectorSectionC3 = base.CreateEntity(constants.ABAQUS, "CONNECTOR_SECTION", vals)
 		
@@ -1386,6 +1403,111 @@ class SkodaBeamType(AudiBeamType):
 		self.clipEntities['connector_beams'] = self.connectingBeams
 
 # ==============================================================================
+@util.registerClass
+class DaimlerSoloBeamType(AudiBeamType):
+	
+	NAME = 'DAIMLER SOLO'
+	INFO = 'AUDI CONNECTOR type clip consists of 1 connector element and beams joining connector with a clip and its contra side.'
+	ICON = os.path.join(util.PATH_RES, 'icons', 'clip_beam_skoda.png')
+	
+	CONNECTOR_ELASTICITY = 0.1
+	CONNECTOR_DISTANCE = 5.0
+	CONNECTING_BEAM_SECTION_ID = 5001
+	
+	#-------------------------------------------------------------------------
+	
+	def hasStopDistance(self):
+		
+		return False
+			
+	#-------------------------------------------------------------------------
+
+	def createConnector(self):
+		
+		# create connector elasticity
+		vals = {'Name': 'CONNECTOR ELASTICITY',
+			 'COMP': 'YES',
+			 'COMP(1)': 'YES', 'El.Stiff.(1)': self.CONNECTOR_ELASTICITY,
+			 'COMP(2)': 'YES', 'RIGID(2)': 'YES',
+			 'COMP(3)': 'YES', 'RIGID(3)': 'YES',
+			}
+		self.connectorElasticity = base.CreateEntity(constants.ABAQUS, "CONNECTOR_ELASTICITY", vals)
+	
+		# create connector behavior
+		vals = {'Name': 'CONNECTOR BEHAVIOR',
+			'*ELASTICITY': 'YES', 'EL>data': self.connectorElasticity._id,
+			'*STOP':'NO',
+			}
+		self.connectorBehavior = base.CreateEntity(constants.ABAQUS, "CONNECTOR BEHAVIOR", vals)
+		
+		# create a connector section
+		vals = {'Name': 'CONNECTOR_SECTION',
+			 'MID': self.connectorBehavior._id,
+			'COMPONENT_1': 'CARDAN', 'COMPONENT_2':  'CARTESIAN', 'ORIENT_1': self.parentClip.geomType().coordSystem.id,
+			}
+		self.connectorSection = base.CreateEntity(constants.ABAQUS, "CONNECTOR_SECTION", vals)
+		
+		# create a connector
+		vals = {'Name': 'CONNECTOR_%s' % self.NAME.replace(' ', '_'),
+			'PID': self.connectorSection._id,
+			'G1':  self.connectingBeamsCenterNode1._id, 'G2': self.connectingBeamsCenterNode2._id}
+		self.connector = base.CreateEntity(constants.ABAQUS, "CONNECTOR", vals)
+		
+		self.clipEntities['connector'] = [
+			self.connectorElasticity,
+			self.connectorBehavior,
+			self.connectorSection,
+			self.connector]
+
+# ==============================================================================
+@util.registerClass
+class DaimlerChannelBeamType(DaimlerSoloBeamType):
+	
+	NAME = 'DAIMLER CHANNEL'
+	INFO = 'AUDI CONNECTOR type clip consists of 1 connector element and beams joining connector with a clip and its contra side.'
+	ICON = os.path.join(util.PATH_RES, 'icons', 'clip_beam_skoda.png')
+		
+	#-------------------------------------------------------------------------
+
+	def createConnector(self):
+		
+		# create connector elasticity
+		vals = {'Name': 'CONNECTOR ELASTICITY',
+			 'COMP': 'YES',
+			 'COMP(1)': 'YES', 'El.Stiff.(1)': self.CONNECTOR_ELASTICITY,
+			 'COMP(2)': 'YES', 'RIGID(2)': 'YES',
+			 'COMP(3)': 'YES', 'RIGID(3)': 'YES',
+			 'COMP(4)': 'YES', 'RIGID(4)': 'YES',
+			}
+		self.connectorElasticity = base.CreateEntity(constants.ABAQUS, "CONNECTOR_ELASTICITY", vals)
+	
+		# create connector behavior
+		vals = {'Name': 'CONNECTOR BEHAVIOR',
+			'*ELASTICITY': 'YES', 'EL>data': self.connectorElasticity._id,
+			'*STOP':'NO',
+			}
+		self.connectorBehavior = base.CreateEntity(constants.ABAQUS, "CONNECTOR BEHAVIOR", vals)
+		
+		# create a connector section
+		vals = {'Name': 'CONNECTOR_SECTION',
+			 'MID': self.connectorBehavior._id,
+			'COMPONENT_1': 'CARDAN', 'COMPONENT_2':  'CARTESIAN', 'ORIENT_1': self.parentClip.geomType().coordSystem.id,
+			}
+		self.connectorSection = base.CreateEntity(constants.ABAQUS, "CONNECTOR_SECTION", vals)
+		
+		# create a connector
+		vals = {'Name': 'CONNECTOR_%s' % self.NAME.replace(' ', '_'),
+			'PID': self.connectorSection._id,
+			'G1':  self.connectingBeamsCenterNode1._id, 'G2': self.connectingBeamsCenterNode2._id}
+		self.connector = base.CreateEntity(constants.ABAQUS, "CONNECTOR", vals)
+		
+		self.clipEntities['connector'] = [
+			self.connectorElasticity,
+			self.connectorBehavior,
+			self.connectorSection,
+			self.connector]
+
+# ==============================================================================
 
 class SymmetricalClip(object):
 	
@@ -1395,7 +1517,7 @@ class SymmetricalClip(object):
 		
 		self.parentClip = parentClip
 		
-		self.parentClip.createSymmetricalCoorSys()
+		self.parentClip.geomType().createSymmetricalCoorSys()
 		self.mirrorClip()
 		self.updateConnectorOrienation()
 		self.showNearElements()
@@ -1427,31 +1549,38 @@ class SymmetricalClip(object):
 			newConnectorBehaviorID = getEntityProperty(newConnectorSection, 'MID')
 			newConnectorBehavior = base.GetEntity(constants.ABAQUS, "CONNECTOR BEHAVIOR", newConnectorBehaviorID)
 			
-			connectorStopID =  getEntityProperty(newConnectorBehavior, 'STP>data')
-			connectorStop = base.GetEntity(constants.ABAQUS, "CONNECTOR_STOP", connectorStopID)
+			# symmetry stp sidtance if applicable
+			if self.parentClip.beamType().hasStopDistance():
+				connectorStopID =  getEntityProperty(newConnectorBehavior, 'STP>data')
+				connectorStop = base.GetEntity(constants.ABAQUS, "CONNECTOR_STOP", connectorStopID)
+				
+				vals = dict()
+				vals['Name'] = getEntityProperty(connectorStop, 'Name')
+				xLow = getEntityProperty(connectorStop, 'COMP (1)')
+				if xLow == 'YES':
+					vals.update({'COMP (1)': 'YES', 'Low.Lim.(1)': -1*self.parentClip.geomType().xUp, 'Up.Lim.(1)': -1*self.parentClip.geomType().xLow,
+					 'COMP (2)': 'YES', 'Low.Lim.(2)': self.parentClip.geomType().yLow, 'Up.Lim.(2)': self.parentClip.geomType().yUp})
+				
+				vals.update({ 'COMP (3)': 'YES', 'Low.Lim.(3)': self.parentClip.geomType().zLow, 'Up.Lim.(3)': self.parentClip.geomType().zUp})
+				
+				# create the new connector stop
+				newConnectorStop = base.CreateEntity(constants.ABAQUS, "CONNECTOR_STOP", vals)
 			
-			vals = dict()
-			vals['Name'] = getEntityProperty(connectorStop, 'Name')
-			xLow = getEntityProperty(connectorStop, 'COMP (1)')
-			if xLow == 'YES':
-				vals.update({'COMP (1)': 'YES', 'Low.Lim.(1)': -1*self.parentClip.xUp, 'Up.Lim.(1)': -1*self.parentClip.xLow,
-				 'COMP (2)': 'YES', 'Low.Lim.(2)': self.parentClip.yLow, 'Up.Lim.(2)': self.parentClip.yUp})
-			
-			vals.update({ 'COMP (3)': 'YES', 'Low.Lim.(3)': self.parentClip.zLow, 'Up.Lim.(3)': self.parentClip.zUp})
-			
-			# create the new connector stop
-			newConnectorStop = base.CreateEntity(constants.ABAQUS, "CONNECTOR_STOP", vals)
-		
-			# create the new connector behavior
-			vals = {'Name': getEntityProperty(newConnectorBehavior, 'Name'),
-				'*ELASTICITY': 'YES', 'EL>data': self.parentClip.connectorElasticity._id,
-				'*STOP':'YES', 'STP>data': newConnectorStop._id,
-				}
+				# create the new connector behavior
+				vals = {'Name': getEntityProperty(newConnectorBehavior, 'Name'),
+					'*ELASTICITY': 'YES', 'EL>data': self.parentClip.beamType().connectorElasticity._id,
+					'*STOP':'YES', 'STP>data': newConnectorStop._id,
+					}
+			else:
+				vals = {'Name': getEntityProperty(newConnectorBehavior, 'Name'),
+					'*ELASTICITY': 'YES', 'EL>data': self.parentClip.beamType().connectorElasticity._id,
+					'*STOP':'NO'
+					}
 			newConnectorBehavior = base.CreateEntity(constants.ABAQUS, "CONNECTOR BEHAVIOR", vals)
 			
 			# update coor sys and connector behaviour
 			vals = {
-				'ORIENT_1': self.parentClip.symmCoordSystem._id,
+				'ORIENT_1': self.parentClip.geomType().symmCoordSystem._id,
 				'MID' : newConnectorBehavior._id}
 			base.SetEntityCardValues(constants.ABAQUS, newConnectorSection, vals)
 	
@@ -1686,4 +1815,3 @@ NOTE:
 #	runSmartClip('Standard', 'SKODA')
 #	runSmartClip('Standard', 'AUDI')
 #	runSmartClip('Reversed', 'AUDI')
-
